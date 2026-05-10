@@ -1,0 +1,107 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]        # → staging automático
+    tags: ["v*.*.*"]        # → produção (requer aprovação manual)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/backend
+
+jobs:
+  # ─── build e push da imagem ───────────────────────────────────────────────
+  build:
+    name: Build & push Docker image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── deploy staging (push para main) ─────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: SSH e deploy staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DO_SERVER_IP }}
+          username: deploy
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/watchlist
+            export IMAGE_TAG=sha-${{ github.sha }}
+            export GITHUB_REPOSITORY=${{ github.repository }}
+            docker compose -f docker-compose.staging.yml pull
+            docker compose -f docker-compose.staging.yml up -d
+            docker compose -f docker-compose.staging.yml exec -T web_staging bundle exec rails db:migrate
+            docker image prune -f
+
+  # ─── deploy produção (push de tag v*.*.*) ─────────────────────────────────
+  deploy-production:
+    name: Deploy → Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production     # requer aprovação manual configurada no GitHub
+
+    steps:
+      - name: SSH e deploy produção
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DO_SERVER_IP }}
+          username: deploy
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/watchlist
+            export IMAGE_TAG=${{ github.ref_name }}
+            export GITHUB_REPOSITORY=${{ github.repository }}
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml exec -T web bundle exec rails db:migrate
+            docker image prune -f
