@@ -20,7 +20,7 @@
 
 ## 📂 Estrutura de Documentação
 
-Esta pasta contém 4 arquivos principais:
+Esta pasta contém os seguintes arquivos:
 
 ### 1. **movie_app_features.md** - Especificação de Features
 Descreve **O QUE** o app faz, separado em:
@@ -66,6 +66,27 @@ Descreve **COMO ARMAZENAR** os dados, com:
 
 ### 4. **README.md** (este arquivo)
 Seu mapa da documentação e guia rápido.
+
+---
+
+### 5. **CONTEXTO_PROJETO.md** — Síntese executiva
+O "porquê", o "o quê" e o "como" do projeto em uma página só. Ponto de entrada recomendado para quem está chegando agora.
+
+**Leia quando:** Precisar do panorama rápido do projeto.
+
+---
+
+### 6. **00_CHECKLIST_FINAL.md** — Status da infraestrutura
+Status atualizado de tudo que foi documentado e implementado, com roadmap das próximas semanas.
+
+**Leia quando:** Quiser saber o que está feito e o que vem a seguir.
+
+---
+
+### 7. **infraestrutura_conceitos.md** — Guia didático da infraestrutura
+Explica didaticamente cada decisão técnica da Fase 0: Rails API-only, Gemfile, testes (RSpec, SimpleCov, VCR, DatabaseCleaner), Docker multi-stage, Docker Compose, Nginx, GitHub Actions CI/CD e Terraform. Inclui o conceito por trás de cada escolha.
+
+**Leia quando:** Quiser entender o *porquê* de cada ferramenta e técnica implementada.
 
 ---
 
