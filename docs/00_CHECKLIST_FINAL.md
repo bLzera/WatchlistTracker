@@ -1,217 +1,129 @@
-# ✅ Checklist Final - Movie & TV Series Tracker
+# Checklist de Infraestrutura — WatchlistTracker
 
-## 📦 Arquivos Gerados (7 Total)
-
-```
-✅ README.md (8.0 KB)
-   └─ Visão geral + navegação
-
-✅ movie_app_features.md (17 KB)
-   └─ O QUÊ vocês vão fazer (features)
-
-✅ requisitos_funcionais.md (31 KB)
-   └─ COMO testar (36 RFs detalhados)
-
-✅ arquitetura_dados.md (25 KB)
-   └─ COMO guardar dados (ER + SQL)
-
-✅ arquitetura_llm.md (29 KB)
-   └─ COMO gerar resumos IA (pipeline)
-
-✅ ruby_on_rails_architecture.md (37 KB)
-   └─ COMO implementar (Rails específico)
-
-✅ GUIA_USO_DOCUMENTACAO.md (este arquivo)
-   └─ Como usar tudo junto
-```
-
-**Total: 147 KB de documentação pronta para usar!**
+> Última atualização: 2026-05-10
 
 ---
 
-## 📊 Status por Aspecto
+## Documentação de Produto (docs/)
 
-### Planejamento
-- ✅ Features especificadas
-- ✅ Requisitos funcionais definidos
-- ✅ Cronograma sugerido (12 semanas)
-- ✅ MVP definido (phase 1)
-
-### Arquitetura Técnica
-- ✅ Stack Rails escolhido
-- ✅ Banco de dados modelado
-- ✅ API endpoints documentados
-- ✅ WebSocket (Action Cable) escolhido
-- ✅ Background jobs (Sidekiq) escolhido
-
-### Feature Premium (IA)
-- ✅ Fluxo de dados completo
-- ✅ Integração TMDB + Claude mapeada
-- ✅ Conexões narrativas especificadas
-- ✅ Handling de erros definido
-- ✅ Custo estimado (US$0.01/mês)
-
-### Implementação
-- ✅ Stack Rails com gems recomendadas
-- ✅ Estrutura de pastas definida
-- ✅ Models Rails (com relacionamentos)
-- ✅ Controllers (com exemplos)
-- ✅ Background jobs (com código)
-- ✅ WebSocket (com código)
-- ✅ Migrations (com exemplos)
-
-### Deploy
-- ✅ VPS setup documentado
-- ✅ Nginx + Puma configurado
-- ✅ Systemd services prontos
-- ✅ Redis para jobs
-- ✅ Sidekiq web UI
-
-### Testing
-- ❌ Estratégia RSpec (não criado)
-- ❌ E2E testing (Cypress/Playwright)
-- ❌ Fixtures/factories (Factory Bot)
-
-### CI/CD
-- ❌ GitHub Actions workflow
-- ❌ Automated testing
-- ❌ Automated deployment
+| Arquivo | Status | Conteúdo |
+|---|---|---|
+| `README.md` | ✅ | Visão geral + navegação |
+| `movie_app_features.md` | ✅ | O QUÊ fazer (features) |
+| `requisitos_funcionais.md` | ✅ | 36 RFs com critérios de aceitação |
+| `arquitetura_dados.md` | ✅ | MER + SQL + queries |
+| `arquitetura_llm.md` | ✅ | Pipeline TMDB + Claude |
+| `ruby_on_rails_architecture.md` | ✅ | Stack Rails com gems e exemplos |
+| `GUIA_USO_DOCUMENTACAO.md` | ✅ | Meta-guia da documentação |
+| `CONTEXTO_PROJETO.md` | ✅ | Síntese executiva do projeto |
+| `API_SPECIFICATION.md` | ❌ | OpenAPI/Swagger — a criar |
 
 ---
 
-## 🎯 O Que Vocês Têm
+## Infraestrutura (implementado em 2026-05-10)
 
-| Item | Status | Arquivo |
-|------|--------|---------|
-| **Features** | ✅ Completo | movie_app_features.md |
-| **Requisitos de Teste** | ✅ Completo | requisitos_funcionais.md |
-| **Modelo de Dados** | ✅ Completo | arquitetura_dados.md |
-| **Fluxo IA** | ✅ Completo | arquitetura_llm.md |
-| **Stack Rails** | ✅ Completo | ruby_on_rails_architecture.md |
-| **Guia de Uso** | ✅ Completo | GUIA_USO_DOCUMENTACAO.md |
-| **API Spec (OpenAPI)** | ❌ Não criado | - |
-| **Testing Strategy** | ❌ Não criado | - |
-| **CI/CD** | ❌ Não criado | - |
+### Aplicação Rails
+- ✅ Rails 8.1 API-only (`backend/`) — gerado via `rails new --api`
+- ✅ Gemfile configurado: Devise+JWT, Pundit, Sidekiq, Redis, HTTParty, jsonapi-serializer, dotenv
+- ✅ Gems de teste: RSpec, FactoryBot, Faker, Shoulda-matchers, VCR, WebMock, DatabaseCleaner, SimpleCov
+- ✅ `config/database.yml` usando `DATABASE_URL` por ambiente
+- ✅ `.rubocop.yml` com rubocop-rails-omakase + rubocop-rspec
 
----
+### Testes
+- ✅ `spec/spec_helper.rb` + `spec/rails_helper.rb` com SimpleCov (mínimo 80%)
+- ✅ `spec/support/factory_bot.rb` — FactoryBot.lint no suite completo
+- ✅ `spec/support/vcr.rb` — VCR + WebMock, sem HTTP real no CI
+- ✅ `spec/support/auth_helpers.rb` — helpers JWT para specs autenticadas
+- ✅ `spec/support/database_cleaner.rb` — transaction/truncation por tipo de spec
+- ✅ `spec/support/shared_contexts/` — contextos reutilizáveis (authenticated_user, authenticated_owner)
+- ✅ Estrutura de diretórios: `spec/{models,requests/{auth,lists,items,ai},services,jobs,channels,factories}`
+- ❌ Testes E2E (Cypress/Playwright) — Fase 2+
 
-## 🚀 O Que Fazer Agora
+### Containerização
+- ✅ `backend/Dockerfile` — multi-stage (builder + runtime), usuário não-root, jemalloc
+- ✅ `backend/Dockerfile.dev` — imagem de desenvolvimento com live reload
+- ✅ `docker-compose.yml` — ambiente dev (web, sidekiq, postgres, redis, mailhog)
+- ✅ `docker-compose.staging.yml` — staging no mesmo servidor (porta 3001, DB separado)
+- ✅ `docker-compose.prod.yml` — produção (restart policy, logs JSON)
+- ✅ `nginx/nginx.conf` — proxy reverso prod+staging, WebSocket (Action Cable), SSL
 
-### Passo 1: Organizar (30 min)
-- [ ] Criar pasta `docs/` no projeto
-- [ ] Adicionar os 7 `.md` files
-- [ ] Criar `docs/INDEX.md` com links
-- [ ] Commitar no GitHub: `git commit -m "docs: initial project documentation"`
+### CI/CD (GitHub Actions)
+- ✅ `.github/workflows/ci.yml`:
+  - `security`: brakeman (SAST) + bundler-audit (CVE check)
+  - `lint`: RuboCop com cache
+  - `test`: RSpec com postgres+redis como services, cobertura artefato
+- ✅ `.github/workflows/deploy.yml`:
+  - Build imagem Docker → push para ghcr.io
+  - Push `main` → deploy automático para staging
+  - Tag `v*.*.*` → deploy para produção com aprovação manual (GitHub Environments)
+- ❌ Notificações de deploy (Slack/email) — Fase 2+
 
-### Passo 2: Ler (2 horas)
-- [ ] Ler README.md
-- [ ] Ler movie_app_features.md
-- [ ] Skimming requisitos_funcionais.md
-- [ ] Ler ruby_on_rails_architecture.md
+### Infrastructure as Code (Terraform)
+- ✅ Provider: `digitalocean/digitalocean ~> 2.40`
+- ✅ Remote state: DigitalOcean Spaces (S3-compatible)
+- ✅ `modules/server`: `digitalocean_droplet` + `digitalocean_firewall` + cloud-init (instala Docker automaticamente)
+- ✅ `modules/networking`: `digitalocean_reserved_ip` (IP estático para DNS)
+- ✅ `environments/production/`: main.tf + variables.tf + outputs.tf + terraform.tfvars.example
+- ❌ Staging em servidor separado — não planejado (staging usa mesmo Droplet)
 
-### Passo 3: Planejar (1 hora)
-- [ ] Vocês 2 sentam juntos
-- [ ] Discutem: "Quem faz o quê?" (backend vs frontend)
-- [ ] Escolhem: "Quando começamos?"
-- [ ] Definem: "Qual feature no MVP?"
-
-### Passo 4: Setup Rails (1 hora)
-```bash
-# Um de vocês faz:
-rails new movie_tracker --api --database=postgresql --skip-test
-cd movie_tracker
-
-# Frontend:
-npm create vite@latest frontend -- --template react
-```
-
-### Passo 5: Começar Dev (Semana 1)
-- [ ] Implementar autenticação (Devise + JWT)
-- [ ] Setup banco PostgreSQL
-- [ ] Criar models básicos (User, List, Movie)
-
----
-
-## 📋 Próximos Documentos (Opcional)
-
-Se querem ser ainda mais detalhados:
-
-1. **API_SPECIFICATION.md**
-   - OpenAPI/Swagger spec
-   - Exemplo de cada endpoint
-   - Exemplo de request/response
-
-2. **TESTING_STRATEGY.md**
-   - Como escrever testes RSpec
-   - Como estruturar testes
-   - Cobertura mínima por feature
-
-3. **DEPLOYMENT_GUIDE.md**
-   - Passo a passo VPS (Digital Ocean, Linode)
-   - Instruções exatas de instalação
-   - Troubleshooting comum
-
-Quer que eu crie algum desses?
+### DX (Developer Experience)
+- ✅ `Makefile` — atalhos para dev, teste, lint, console, migrate, staging
+- ✅ `backend/.env.example` — todas as variáveis documentadas
+- ✅ `backend/.env.development` — valores padrão para dev local
+- ✅ `.gitignore` — env files, terraform state, cobertura, cassetes VCR
+- ✅ `README.md` raiz — setup rápido em 3 comandos, tabela de comandos, estrutura do repo
 
 ---
 
-## 🎯 Resposta Final à Sua Pergunta
+## Próximos Passos (Implementação de Features)
 
-### "Todos os artefatos da sessão são os atualizados?"
+Seguir o cronograma de 12 semanas definido em `docs/README.md`.
 
-**✅ SIM!**
+**Semana 1-2 — Auth (RF-001..004)**
+- [ ] Model `User` com Devise + devise-jwt
+- [ ] Controllers: `registrations`, `sessions`, `passwords`, `confirmations`
+- [ ] Specs de request para RF-001 (registro), RF-002 (login), RF-003 (senha), RF-004 (perfil)
+- [ ] Factory `:user`
 
-Todos os 7 arquivos em `/mnt/user-data/outputs/` são:
-- ✅ Os mais recentes (criados nesta sessão)
-- ✅ Finalizados e completos
-- ✅ Prontos para usar
+**Semana 3 — Integração TMDB/OMDb (RF-009..011)**
+- [ ] Service `TmdbClient` + `OmdbClient`
+- [ ] Model `Movie` (cache local)
+- [ ] Endpoint `GET /api/v1/search`
+- [ ] VCR cassetes para as chamadas externas
 
-**Último update:** 2024-01-15 (hoje)
+**Semana 4-5 — CRUD de Listas e Itens (RF-005..015)**
+- [ ] Models: `List`, `ListMember`, `ListItem`
+- [ ] Policies Pundit para cada model
+- [ ] Controllers REST completos
+- [ ] Specs de request cobrindo caminhos felizes + erros de autorização
 
-### "São apenas os artefatos que vamos usar pra implementação?"
+**Semana 6 — Real-time (RF-027)**
+- [ ] Action Cable channel `ListChannel`
+- [ ] Broadcast em cada mutação de lista
+- [ ] Specs de channel
 
-**✅ SIM! Exatamente isso.**
+**Semana 7-8 — IA (RF-028..031)**
+- [ ] Service `AnthropicClient`
+- [ ] Model `ResumoIa` com JSONB
+- [ ] Sidekiq job `GenerateEpisodeSummaryJob`
+- [ ] Pipeline: marcar episódio → buscar contexto → gerar → cachear
 
-Vocês têm:
-```
-1. movie_app_features.md          ← O que fazer
-2. requisitos_funcionais.md       ← Como testar
-3. arquitetura_dados.md           ← Banco de dados
-4. arquitetura_llm.md             ← Feature IA
-5. ruby_on_rails_architecture.md  ← Implementação Rails
-6. GUIA_USO_DOCUMENTACAO.md       ← Como usar tudo
-7. README.md                      ← Visão geral
-```
-
-**NÃO FALTA NADA!** Vocês podem começar a implementar agora.
-
----
-
-## 🔗 Links Rápidos
-
-```
-Começo?           → README.md
-Entender features? → movie_app_features.md
-Testar?           → requisitos_funcionais.md
-Banco de dados?   → arquitetura_dados.md
-Resumos IA?       → arquitetura_llm.md
-Implementar Rails? → ruby_on_rails_architecture.md
-Como usar tudo?   → GUIA_USO_DOCUMENTACAO.md (este arquivo)
-```
+**Semana 9-12 — Frontend React + Deploy**
+- [ ] Scaffold do projeto React em `frontend/`
+- [ ] `terraform apply` → provisionar Droplet + IP reservado
+- [ ] Configurar DNS, SSL (Certbot), segredos GitHub
+- [ ] Primeiro deploy de produção via tag `v0.1.0`
 
 ---
 
-## ✨ Você Está Pronto!
+## Segredos GitHub necessários
 
-Vocês têm uma **documentação profissional e completa** para:
+Configure em `Settings → Secrets and variables → Actions`:
 
-✅ Entender o projeto
-✅ Planejar o desenvolvimento
-✅ Implementar cada feature
-✅ Testar se está correto
-✅ Deploy em produção
+| Secret | Descrição |
+|---|---|
+| `DO_SSH_PRIVATE_KEY` | Chave privada SSH para o usuário `deploy` no Droplet |
+| `DO_SERVER_IP` | IP reservado do Droplet (output do `terraform apply`) |
+| `GITHUB_TOKEN` | Automático — usado para push no ghcr.io |
 
-**Não precisa fazer mais nada de planejamento. Pode começar a codificar!** 🚀
-
-Boa sorte com o projeto! Qualquer dúvida durante a implementação, pode voltar aqui para perguntar.
-
+Vars de aplicação (`ANTHROPIC_API_KEY`, `DATABASE_URL`, etc.) ficam no servidor em `/opt/watchlist/prod/.env` e `/opt/watchlist/staging/.env` — nunca em secrets do GitHub.
