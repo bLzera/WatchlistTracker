@@ -1,0 +1,7 @@
+# Copie para terraform.tfvars e preencha (nunca commite o .tfvars com valores reais)
+
+do_token          = "dop_v1_..."
+region            = "nyc1"
+droplet_size      = "s-2vcpu-2gb"
+ssh_key_id        = "xx:xx:xx:..."   # fingerprint da chave no DO
+deploy_public_key = "ssh-ed25519 AAAA..."
