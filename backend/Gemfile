@@ -1,0 +1,52 @@
+source "https://rubygems.org"
+
+gem "rails", "~> 8.1.3"
+gem "pg", "~> 1.1"
+gem "puma", ">= 5.0"
+gem "tzinfo-data", platforms: %i[ windows jruby ]
+gem "bootsnap", require: false
+gem "thruster", require: false
+
+# CORS
+gem "rack-cors"
+
+# Auth
+gem "bcrypt", "~> 3.1.7"
+gem "devise"
+gem "devise-jwt"
+gem "pundit"
+
+# Background jobs (Redis + Sidekiq em vez de Solid Queue)
+gem "sidekiq"
+gem "redis", ">= 4.0"
+
+# Serialização de API
+gem "jsonapi-serializer"
+
+# HTTP client (chamadas TMDB / OMDb / Claude)
+gem "httparty"
+
+# Variáveis de ambiente
+gem "dotenv-rails"
+
+group :development, :test do
+  gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+  gem "bundler-audit", require: false
+  gem "brakeman", require: false
+  gem "rubocop-rails-omakase", require: false
+  gem "rubocop-rspec", require: false
+
+  # Testes
+  gem "rspec-rails"
+  gem "factory_bot_rails"
+  gem "faker"
+  gem "shoulda-matchers"
+  gem "webmock"
+  gem "vcr"
+  gem "database_cleaner-active_record"
+  gem "simplecov", require: false
+end
+
+group :development do
+  gem "listen"
+end

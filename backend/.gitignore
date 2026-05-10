@@ -1,0 +1,21 @@
+# Segredos — NUNCA commitar
+/config/master.key
+/config/credentials/*.key
+/.env*
+!/.env.example
+
+# Rails gerados em runtime
+/tmp/
+/log/
+/storage/
+/.byebug_history
+/coverage/
+/spec/examples.txt
+/spec/cassettes/*.yml
+
+# Bundler
+/vendor/bundle/
+
+# Sistema
+.DS_Store
+*.swp
