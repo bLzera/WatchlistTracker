@@ -1,0 +1,65 @@
+name: watchlist-staging
+
+services:
+  web_staging:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:${IMAGE_TAG:-latest}
+    command: ./bin/rails server -b 0.0.0.0
+    ports:
+      - "3001:3000"
+    env_file:
+      - /opt/watchlist/staging/.env
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:${STAGING_DB_PASSWORD}@postgres_staging:5432/watchlist_staging
+      REDIS_URL: redis://redis:6379/1
+    depends_on:
+      postgres_staging:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - watchlist_net
+
+  sidekiq_staging:
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:${IMAGE_TAG:-latest}
+    command: bundle exec sidekiq
+    env_file:
+      - /opt/watchlist/staging/.env
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:${STAGING_DB_PASSWORD}@postgres_staging:5432/watchlist_staging
+      REDIS_URL: redis://redis:6379/1
+    depends_on:
+      - postgres_staging
+      - redis
+    restart: unless-stopped
+    networks:
+      - watchlist_net
+
+  postgres_staging:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD}
+      POSTGRES_DB: watchlist_staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - watchlist_net
+
+volumes:
+  postgres_staging_data:
+
+networks:
+  watchlist_net:
+    external: true
+    name: watchlist_watchlist_net

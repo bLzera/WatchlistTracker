@@ -1,0 +1,81 @@
+name: watchlist-prod
+
+services:
+  web:
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:${IMAGE_TAG:-latest}
+    command: ./bin/rails server -b 0.0.0.0
+    ports:
+      - "3000:3000"
+    env_file:
+      - /opt/watchlist/prod/.env
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/watchlist_production
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - watchlist_net
+
+  sidekiq:
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:${IMAGE_TAG:-latest}
+    command: bundle exec sidekiq
+    env_file:
+      - /opt/watchlist/prod/.env
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/watchlist_production
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - watchlist_net
+
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: watchlist_production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - watchlist_net
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_prod_data:/data
+    restart: unless-stopped
+    networks:
+      - watchlist_net
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
+
+networks:
+  watchlist_net:
+    driver: bridge
