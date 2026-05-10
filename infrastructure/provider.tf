@@ -8,20 +8,10 @@ terraform {
     }
   }
 
-  # Estado remoto em DigitalOcean Spaces (S3-compatible)
-  # Configure as credenciais via env antes de rodar terraform init:
-  #   export AWS_ACCESS_KEY_ID=<spaces-access-key>
-  #   export AWS_SECRET_ACCESS_KEY=<spaces-secret-key>
-  backend "s3" {
-    bucket                      = "watchlist-tf-state"
-    key                         = "production/terraform.tfstate"
-    endpoint                    = "https://nyc3.digitaloceanspaces.com"
-    region                      = "us-east-1"
-    skip_credentials_validation = true
-    skip_metadata_api_check     = true
-    skip_requesting_account_id  = true
-    force_path_style            = true
-  }
+  # State local — terraform.tfstate fica em infrastructure/environments/production/
+  # Está no .gitignore (não commitar — pode conter dados sensíveis).
+  # Faça backup manual do arquivo após cada terraform apply (ex: copie para
+  # um local seguro fora do repositório).
 }
 
 provider "digitalocean" {

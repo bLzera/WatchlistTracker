@@ -60,7 +60,7 @@
 
 ### Infrastructure as Code (Terraform)
 - ✅ Provider: `digitalocean/digitalocean ~> 2.40`
-- ✅ Remote state: DigitalOcean Spaces (S3-compatible)
+- ✅ State local (`terraform.tfstate` no `.gitignore` — fazer backup manual após cada apply)
 - ✅ `modules/server`: `digitalocean_droplet` + `digitalocean_firewall` + cloud-init (instala Docker automaticamente)
 - ✅ `modules/networking`: `digitalocean_reserved_ip` (IP estático para DNS)
 - ✅ `environments/production/`: main.tf + variables.tf + outputs.tf + terraform.tfvars.example

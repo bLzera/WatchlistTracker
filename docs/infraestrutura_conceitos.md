@@ -517,18 +517,15 @@ O `up -d` do Compose recria apenas os containers que mudaram. Containers que nã
 
 **Vantagem:** O estado da infraestrutura fica documentado e reproduzível. Se o servidor for destruído por acidente ou migração, você roda `terraform apply` e o mesmo ambiente é recriado em minutos.
 
-### Remote State
+### State local
 
-```hcl
-backend "s3" {
-  bucket   = "watchlist-tf-state"
-  endpoint = "https://nyc3.digitaloceanspaces.com"
-}
-```
+**O que é:** Terraform mantém um arquivo `terraform.tfstate` que registra o estado atual da infraestrutura — quais recursos existem, quais IDs têm no DigitalOcean, quais dependências há entre eles. Sem esse arquivo, o Terraform não sabe o que já criou e tentaria criar tudo do zero novamente.
 
-**O que é:** Terraform mantém um arquivo `terraform.tfstate` que registra o estado atual da infraestrutura. Se esse arquivo ficar só no computador local e o computador morrer, você perde o rastreamento do que existe no DigitalOcean.
+**Decisão de projeto:** usamos state local (`infrastructure/environments/production/terraform.tfstate`). O arquivo fica na máquina de quem roda o `terraform apply` e está no `.gitignore` — não vai para o repositório porque pode conter dados sensíveis (IPs, IDs internos).
 
-**Por que DigitalOcean Spaces:** O backend `s3` do Terraform é compatível com qualquer armazenamento de objetos que siga o protocolo S3 — não só a AWS. DO Spaces é S3-compatible e fica no mesmo provedor da infraestrutura. O arquivo de estado fica seguro, versionado e acessível de qualquer máquina que tenha as credenciais.
+**Cuidado obrigatório:** faça backup manual do `terraform.tfstate` após cada `terraform apply`. Sem ele, recuperar o controle dos recursos existentes no DigitalOcean exige rodar `terraform import` recurso por recurso. Uma cópia em local seguro (fora do repositório) é suficiente para o Fase 1 com dois usuários.
+
+**Por que não usamos remote state:** As opções comuns são DO Spaces ($5/mês mínimo para guardar um arquivo de ~10 KB) e Terraform Cloud (o free tier foi descontinuado). O overhead financeiro e operacional não justifica na Fase 1.
 
 ### Módulos
 

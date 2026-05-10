@@ -99,16 +99,14 @@ cd infrastructure/environments/production
 # Copiar e preencher variáveis
 cp terraform.tfvars.example terraform.tfvars
 
-# Configurar estado remoto (DigitalOcean Spaces)
-export AWS_ACCESS_KEY_ID=<spaces-key>
-export AWS_SECRET_ACCESS_KEY=<spaces-secret>
-
 terraform init
 terraform plan
 terraform apply
 ```
 
 Após o `apply`, o output `server_ip` é o IP estático para apontar o DNS.
+
+> **State local:** o arquivo `terraform.tfstate` fica na sua máquina e está no `.gitignore`. Faça backup dele após cada `apply` — sem ele o Terraform perde o rastreamento dos recursos criados.
 
 ---
 
