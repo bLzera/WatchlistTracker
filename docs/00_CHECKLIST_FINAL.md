@@ -96,7 +96,7 @@
 - ✅ `spec/factories/users.rb` — traits :unconfirmed e :locked
 - ✅ `spec/models/user_spec.rb` — validações, módulos Devise, factory
 
-#### Testes — estado atual (40 exemplos)
+#### Testes — estado atual (40 exemplos, todos passando)
 
 | Spec | Total | Passando | Falhando |
 |---|---|---|---|
@@ -104,32 +104,30 @@
 | `registrations_spec.rb` (RF-001) | 6 | 6 | 0 |
 | `sessions_spec.rb` (RF-002) | 7 | 7 | 0 |
 | `passwords_spec.rb` (RF-003) | 5 | 5 | 0 |
-| `confirmations_spec.rb` (RF-001 reenvio/confirmação) | 3 | 1 | **2** |
+| `confirmations_spec.rb` (RF-001 reenvio/confirmação) | 3 | 3 | 0 |
 | `profile_spec.rb` (RF-004) | 8 | 8 | 0 |
-| **TOTAL** | **40** | **38** | **2** |
+| **TOTAL** | **40** | **40** | **0** |
 
-#### Falhas pendentes
+#### Falhas resolvidas (2026-05-11)
 
-Os 2 testes em `confirmations_spec.rb` relacionados ao `GET /api/v1/auth/confirmation` (confirmar link do e-mail):
-- `"confirma o e-mail e retorna 200"` — resposta é 200 mas `user.reload.confirmed?` retorna false
-- `"retorna 422 com token inválido"` — retorna 200 em vez de 422
+Os 2 testes do `GET /api/v1/auth/confirmation` falhavam porque o helper de request spec `get "...", params: {...}, as: :json` promovia a requisição GET para POST silenciosamente — o request chegava no roteador como POST e caía no `confirmations#create` (que sempre retorna 200 "e-mail reenviado"), nunca no `#show`. A hipótese antiga (isolamento de pool de conexão) estava errada.
 
-**Diagnóstico:** a lógica do controller está correta (verificada em `rails runner` em isolamento). O problema é de isolamento de conexão de banco entre o contexto do request spec e o código do controller — o controller confirma o usuário numa connection do pool, mas o `user.reload` do teste lê de outra. Pendente para próxima sessão.
+**Diagnóstico real:** confirmado via `warn` no controller — `request.method` chegava como `POST` mesmo com `get` no teste.
 
-**Cobertura atual:** 65-68% (abaixo dos 80% mínimos por conta dos 2 testes falhando)
+**Fix:** remover `as: :json` dos GETs (params já vão por query string em GET, não há body JSON pra serializar). Aplicado em `spec/requests/auth/confirmations_spec.rb`.
+
+#### Pendência: coverage
+
+**Cobertura atual:** 70.97% (abaixo dos 80% mínimos do SimpleCov). O gap não vinha dos testes que falhavam — mesmo com eles passando o coverage continua baixo. Falta cobrir caminhos não-felizes em controllers de auth e provavelmente o `JwtDenylist` / policies. A resolver na próxima sessão.
 
 ---
 
 ## Próximos Passos
 
-### Imediato — resolver falhas dos testes de confirmação
-- Investigar isolamento de conexão em request specs com strategy `:truncation`
-- Possível solução: `config.before(:each, type: :request) { ActiveRecord::Base.connection_pool.disconnect! }` para forçar nova conexão, ou usar `shared_connection` helper
-
-### Semana 2 — concluir Auth e commit
-- Resolver os 2 testes de confirmação
-- Garantir cobertura ≥ 80%
-- Commit `feat: implement authentication (RF-001..004)`
+### Imediato — subir coverage para ≥ 80%
+- Auditar `coverage/index.html` por arquivo
+- Adicionar specs para caminhos não-felizes (erros de validação, autorização, JWT inválido/expirado, denylist)
+- Cobrir `UserPolicy` / `ApplicationPolicy` explicitamente
 
 ### Semana 3 — Integração TMDB/OMDb (RF-009..011)
 - [ ] Service `TmdbClient` + `OmdbClient`

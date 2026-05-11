@@ -26,8 +26,7 @@ RSpec.describe "Auth Confirmations", type: :request do
         user.update_columns(confirmation_token: enc, confirmation_sent_at: 1.minute.ago)
 
         get "/api/v1/auth/confirmation",
-            params: { confirmation_token: raw },
-            as: :json
+            params: { confirmation_token: raw }
 
         expect(response).to have_http_status(:ok)
         expect(user.reload.confirmed?).to be true
@@ -37,8 +36,7 @@ RSpec.describe "Auth Confirmations", type: :request do
     context "com token inválido" do
       it "retorna 422" do
         get "/api/v1/auth/confirmation",
-            params: { confirmation_token: "token_invalido_xyz" },
-            as: :json
+            params: { confirmation_token: "token_invalido_xyz" }
 
         expect(response).to have_http_status(:unprocessable_entity)
       end
