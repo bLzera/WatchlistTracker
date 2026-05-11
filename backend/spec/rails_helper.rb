@@ -35,21 +35,13 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include AuthHelpers, type: :request
 
-  config.before(:suite) do
-    FactoryBot.lint
-    DatabaseCleaner.clean_with(:truncation)
-  end
-
-  config.before(:each) do |example|
-    DatabaseCleaner.strategy = example.metadata[:js] ? :truncation : :transaction
-    DatabaseCleaner.start
-  end
-
-  config.after(:each) do
-    DatabaseCleaner.clean
-  end
+  # DatabaseCleaner e FactoryBot.lint configurados em spec/support/database_cleaner.rb
+  # Shoulda::Matchers configurado abaixo
 end
 
 Shoulda::Matchers.configure do |config|
-  config.integrate { |with| with.test_framework(:rspec).library(:rails) }
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
 end

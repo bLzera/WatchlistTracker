@@ -1,0 +1,11 @@
+<p>Olá <%= @email %>!</p>
+
+<p>Confirme sua conta clicando no link abaixo:</p>
+
+<p>
+  <a href="<%= "#{ENV.fetch('FRONTEND_URL', 'http://localhost:3001')}/confirm?confirmation_token=#{@token}" %>">
+    Confirmar minha conta
+  </a>
+</p>
+
+<p>O link expira em 24 horas. Se você não criou esta conta, ignore este e-mail.</p>

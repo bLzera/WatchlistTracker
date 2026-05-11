@@ -1,0 +1,9 @@
+<p>Olá <%= @resource.email %>!</p>
+
+<p>Sua conta foi bloqueada temporariamente devido a muitas tentativas de login sem sucesso.</p>
+
+<p>
+  <a href="<%= "#{ENV.fetch('FRONTEND_URL', 'http://localhost:3001')}/unlock?unlock_token=#{@token}" %>">
+    Desbloquear minha conta
+  </a>
+</p>
