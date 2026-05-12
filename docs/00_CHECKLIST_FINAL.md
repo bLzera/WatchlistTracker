@@ -1,6 +1,6 @@
 # Checklist de Infraestrutura e Features — WatchlistTracker
 
-> Última atualização: 2026-05-11
+> Última atualização: 2026-05-12
 
 ---
 
@@ -96,7 +96,7 @@
 - ✅ `spec/factories/users.rb` — traits :unconfirmed e :locked
 - ✅ `spec/models/user_spec.rb` — validações, módulos Devise, factory
 
-#### Testes — estado atual (40 exemplos, todos passando)
+#### Testes — estado atual (52 exemplos, todos passando · coverage 93.22%)
 
 | Spec | Total | Passando | Falhando |
 |---|---|---|---|
@@ -104,9 +104,11 @@
 | `registrations_spec.rb` (RF-001) | 6 | 6 | 0 |
 | `sessions_spec.rb` (RF-002) | 7 | 7 | 0 |
 | `passwords_spec.rb` (RF-003) | 5 | 5 | 0 |
-| `confirmations_spec.rb` (RF-001 reenvio/confirmação) | 3 | 3 | 0 |
+| `confirmations_spec.rb` (RF-001 reenvio/confirmação) | 4 | 4 | 0 |
 | `profile_spec.rb` (RF-004) | 8 | 8 | 0 |
-| **TOTAL** | **40** | **40** | **0** |
+| `application_policy_spec.rb` (Pundit base) | 8 | 8 | 0 |
+| `user_policy_spec.rb` (Pundit user) | 4 | 4 | 0 |
+| **TOTAL** | **52** | **52** | **0** |
 
 #### Falhas resolvidas (2026-05-11)
 
@@ -116,18 +118,18 @@ Os 2 testes do `GET /api/v1/auth/confirmation` falhavam porque o helper de reque
 
 **Fix:** remover `as: :json` dos GETs (params já vão por query string em GET, não há body JSON pra serializar). Aplicado em `spec/requests/auth/confirmations_spec.rb`.
 
-#### Pendência: coverage
+#### Coverage — resolvido (2026-05-12)
 
-**Cobertura atual:** 70.97% (abaixo dos 80% mínimos do SimpleCov). O gap não vinha dos testes que falhavam — mesmo com eles passando o coverage continua baixo. Falta cobrir caminhos não-felizes em controllers de auth e provavelmente o `JwtDenylist` / policies. A resolver na próxima sessão.
+**Cobertura atual:** **93.22%** (110/118 linhas), bem acima do mínimo de 80% do SimpleCov.
+
+Gaps fechados nesta sessão:
+- `spec/policies/application_policy_spec.rb` — defaults `false` para `index?`/`show?`/`create?`/`update?`/`destroy?` + `Scope#resolve` levantando `NotImplementedError`.
+- `spec/policies/user_policy_spec.rb` — `show?` e `update?` retornando `true` apenas quando `record == user`.
+- `spec/requests/auth/confirmations_spec.rb` — branch de falha quando `User#confirm` retorna `false` (linha 28 do controller).
 
 ---
 
 ## Próximos Passos
-
-### Imediato — subir coverage para ≥ 80%
-- Auditar `coverage/index.html` por arquivo
-- Adicionar specs para caminhos não-felizes (erros de validação, autorização, JWT inválido/expirado, denylist)
-- Cobrir `UserPolicy` / `ApplicationPolicy` explicitamente
 
 ### Semana 3 — Integração TMDB/OMDb (RF-009..011)
 - [ ] Service `TmdbClient` + `OmdbClient`

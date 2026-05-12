@@ -41,5 +41,25 @@ RSpec.describe "Auth Confirmations", type: :request do
         expect(response).to have_http_status(:unprocessable_entity)
       end
     end
+
+    context "quando User#confirm retorna false" do
+      let(:user) { create(:user, :unconfirmed) }
+
+      it "retorna 422 com as mensagens de erro" do
+        raw, enc = Devise.token_generator.generate(User, :confirmation_token)
+        user.update_columns(confirmation_token: enc, confirmation_sent_at: 1.minute.ago)
+
+        allow(User).to receive(:find_by).and_call_original
+        allow(User).to receive(:find_by).with(confirmation_token: enc).and_return(user)
+        allow(user).to receive(:confirm).and_return(false)
+        allow(user).to receive_message_chain(:errors, :full_messages).and_return(["Falha ao confirmar"])
+
+        get "/api/v1/auth/confirmation",
+            params: { confirmation_token: raw }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(json_response[:errors]).to include("Falha ao confirmar")
+      end
+    end
   end
 end
