@@ -82,7 +82,7 @@ Gems dentro de grupos só são carregadas no ambiente correspondente. Em produç
 | `redis` | Cache/Queue | Driver para comunicar com o servidor Redis |
 | `rack-cors` | HTTP | Libera requisições cross-origin (frontend em outro domínio) |
 | `jsonapi-serializer` | Serialização | Formata objetos Ruby em JSON estruturado para a resposta da API |
-| `httparty` | HTTP client | Faz requisições HTTP para TMDB, OMDb e Anthropic |
+| `httparty` | HTTP client | Faz requisições HTTP para TVMaze, OMDb, MediaWiki e Anthropic |
 | `dotenv-rails` | Config | Carrega variáveis do arquivo `.env` no ambiente Rails |
 | `rspec-rails` | Teste | Framework de testes BDD para Rails |
 | `factory_bot_rails` | Teste | Cria objetos de teste com dados realistas |
@@ -203,7 +203,7 @@ end
 
 ### 5.4 VCR + WebMock — Gravação de Chamadas HTTP
 
-**O problema:** Testes chamam APIs externas (TMDB, OMDb, Claude). Isso é lento, custa dinheiro, falha quando não há internet e os resultados podem mudar (uma série pode ter mais episódios amanhã).
+**O problema:** Testes chamam APIs externas (TVMaze, OMDb, MediaWiki, Claude). Isso é lento, custa dinheiro, falha quando não há internet e os resultados podem mudar (uma série pode ter mais episódios amanhã).
 
 **A solução — VCR (Video Cassette Recorder):**
 
@@ -217,15 +217,16 @@ VCR.configure do |config|
   config.configure_rspec_metadata!
 
   # Substitui chaves reais por placeholders antes de salvar o cassete
-  config.filter_sensitive_data("<TMDB_API_KEY>") { ENV["TMDB_API_KEY"] }
+  config.filter_sensitive_data("<OMDB_API_KEY>") { ENV["OMDB_API_KEY"] }
   config.filter_sensitive_data("<ANTHROPIC_API_KEY>") { ENV["ANTHROPIC_API_KEY"] }
+  # TVMaze e MediaWiki não usam chave — não há nada a filtrar.
 end
 
 # Bloqueia qualquer chamada HTTP não coberta por cassete
 WebMock.disable_net_connect!(allow_localhost: true)
 ```
 
-**A filtragem** substitui chaves de API reais pela string `<TMDB_API_KEY>` nos cassetes antes de salvá-los — permite commitar os cassetes no git sem vazar credenciais.
+**A filtragem** substitui chaves de API reais pela string `<OMDB_API_KEY>` (ou outras) nos cassetes antes de salvá-los — permite commitar os cassetes no git sem vazar credenciais.
 
 **`allow_localhost: true`** permite que os testes se conectem ao banco de dados e ao Redis (que rodam em localhost), bloqueando apenas conexões à internet.
 

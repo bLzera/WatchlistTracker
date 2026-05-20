@@ -171,7 +171,7 @@ List.owned_by(current_user).not_deleted.recent
 - ✅ **GRANDE PARTE permanece igual**
 - ❌ Código JavaScript → Ruby
 - ✅ Arquitetura permanece idêntica
-- ✅ APIs (TMDB, Claude) continuam as mesmas
+- ✅ APIs atuais: **TVMaze** (catálogo séries), **OMDb** (filmes), **MediaWiki** (plot p/ IA), **Claude** (geração) — TMDB foi descartado em 2026-05-19.
 
 **Quando ler:**
 - 👉 ANTES de implementar geração de resumos
@@ -179,21 +179,21 @@ List.owned_by(current_user).not_deleted.recent
 
 **Conversão para Rails:**
 
-**Original (JavaScript):**
+**Original (JavaScript) — exemplo equivalente:**
 ```javascript
-const response = await fetch(tmdbUrl, { 
-  headers: { 'Authorization': `Bearer ${TMDB_API_KEY}` } 
-});
+const response = await fetch(
+  `https://api.tvmaze.com/shows/${id}/episodes`
+);
 ```
 
 **Rails:**
 ```ruby
-class TmdbService
-  def self.get_episode(series_id, season, episode)
-    HTTParty.get(
-      "/tv/#{series_id}/season/#{season}/episode/#{episode}",
-      headers: { 'Authorization' => "Bearer #{ENV['TMDB_API_KEY']}" }
-    )
+class TvmazeClient
+  include HTTParty
+  base_uri 'https://api.tvmaze.com'
+
+  def self.episodes(tvmaze_id)
+    get("/shows/#{tvmaze_id}/episodes")
   end
 end
 ```
@@ -286,7 +286,7 @@ Total: ~1.5 horas
 ```
 1. arquitetura_llm.md - Fluxo completo
    ├─ Passo a passo de busca de dados
-   ├─ Integração TMDB + Claude
+   ├─ Integração TVMaze + MediaWiki + Claude
    └─ Handling de erros
    ↓
 2. requisitos_funcionais.md - RF-028 a RF-031

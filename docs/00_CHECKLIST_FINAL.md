@@ -1,6 +1,6 @@
 # Checklist de Infraestrutura e Features — WatchlistTracker
 
-> Última atualização: 2026-05-12
+> Última atualização: 2026-05-19
 
 ---
 
@@ -12,12 +12,14 @@
 | `movie_app_features.md` | ✅ | O QUÊ fazer (features) |
 | `requisitos_funcionais.md` | ✅ | 36 RFs com critérios de aceitação |
 | `arquitetura_dados.md` | ✅ | MER + SQL + queries |
-| `arquitetura_llm.md` | ✅ | Pipeline TMDB + Claude |
+| `arquitetura_llm.md` | ✅ | Pipeline TVMaze + MediaWiki + Claude (TV-only) |
 | `ruby_on_rails_architecture.md` | ✅ | Stack Rails com gems e exemplos |
 | `GUIA_USO_DOCUMENTACAO.md` | ✅ | Meta-guia da documentação |
 | `CONTEXTO_PROJETO.md` | ✅ | Síntese executiva do projeto |
 | `infraestrutura_conceitos.md` | ✅ | Guia didático de toda a infraestrutura implementada |
-| `API_SPECIFICATION.md` | ❌ | OpenAPI/Swagger — a criar |
+| `diagrama_deploy.md` | ✅ | Diagramas Mermaid: topologia, request flow, deploy flow |
+| `plano_rswag.md` | ✅ | Plano de implementação da documentação da API com rswag |
+| `backend/swagger/v1/swagger.yaml` | ✅ | OpenAPI 3.0 gerado pelos specs rswag (Auth + Users) |
 
 ---
 
@@ -95,8 +97,9 @@
 - ✅ `ApplicationPolicy` + `UserPolicy` (Pundit)
 - ✅ `spec/factories/users.rb` — traits :unconfirmed e :locked
 - ✅ `spec/models/user_spec.rb` — validações, módulos Devise, factory
+- ✅ Documentação OpenAPI 3.0 via rswag — `swagger/v1/swagger.yaml` + Swagger UI em `/api-docs` (gems `rswag-api`, `rswag-ui`, `rswag-specs`; specs em `spec/requests/api/v1/`)
 
-#### Testes — estado atual (52 exemplos, todos passando · coverage 93.22%)
+#### Testes — estado atual (70 exemplos, todos passando · coverage 93.22%)
 
 | Spec | Total | Passando | Falhando |
 |---|---|---|---|
@@ -108,7 +111,9 @@
 | `profile_spec.rb` (RF-004) | 8 | 8 | 0 |
 | `application_policy_spec.rb` (Pundit base) | 8 | 8 | 0 |
 | `user_policy_spec.rb` (Pundit user) | 4 | 4 | 0 |
-| **TOTAL** | **52** | **52** | **0** |
+| `api/v1/auth/*_spec.rb` (rswag, doc OpenAPI) | 14 | 14 | 0 |
+| `api/v1/users/profile_spec.rb` (rswag) | 4 | 4 | 0 |
+| **TOTAL** | **70** | **70** | **0** |
 
 #### Falhas resolvidas (2026-05-11)
 
@@ -131,11 +136,19 @@ Gaps fechados nesta sessão:
 
 ## Próximos Passos
 
-### Semana 3 — Integração TMDB/OMDb (RF-009..011)
-- [ ] Service `TmdbClient` + `OmdbClient`
-- [ ] Model `Movie` (cache local)
-- [ ] Endpoint `GET /api/v1/search`
-- [ ] VCR cassetes para as chamadas externas
+### Semana 3 — Integração TVMaze + OMDb + MediaWiki (RF-009..011)
+
+> **Decisão 2026-05-19:** TMDB descartado (custo de licença comercial). Stack atual: TVMaze (séries, free, sem chave), OMDb (filmes, free 1000/dia), MediaWiki/Wikipedia (plot p/ IA, sem chave). Detalhes em `arquitetura_llm.md` e `arquitetura_dados.md`.
+
+- [ ] Migration `media` (unifica séries/filmes, discriminador `kind`)
+- [ ] Migration `episodes` (TVMaze + cache Wikipedia: `wiki_page_title`, `wiki_url`, `wiki_plot`, `wiki_fetched_at`)
+- [ ] Service `TvmazeClient` (search_shows, show, episodes)
+- [ ] Service `OmdbClient` (search_movies, find_by_imdb_id)
+- [ ] Service `WikipediaClient` (resolve_page + fetch_episode_plot)
+- [ ] Model `Media` com `find_or_fetch_tv` / `find_or_fetch_movie`
+- [ ] Endpoint `GET /api/v1/search?q=...&kind=tv|movie`
+- [ ] VCR cassetes para TVMaze, OMDb e Wikipedia (sem chave a filtrar em TVMaze/Wikipedia)
+- [ ] Obter chave OMDb e configurar `OMDB_API_KEY` em `.env.development`
 
 ### Semana 4-5 — CRUD de Listas e Itens (RF-005..015)
 - [ ] Models: `List`, `ListMember`, `ListItem`

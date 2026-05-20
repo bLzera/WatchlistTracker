@@ -1,15 +1,19 @@
-require "simplecov"
-SimpleCov.start "rails" do
-  minimum_coverage 80
-  add_filter "/spec/"
-  add_filter "/config/"
-  add_filter "/vendor/"
-  add_group "Controllers", "app/controllers"
-  add_group "Models",      "app/models"
-  add_group "Services",    "app/services"
-  add_group "Jobs",        "app/jobs"
-  add_group "Channels",    "app/channels"
-  add_group "Serializers", "app/serializers"
+# Pula SimpleCov quando o objetivo do run não é executar código de produção
+# (ex: `rake rswag:specs:swaggerize` roda RSpec em --dry-run e zera a cobertura).
+unless ENV["SKIP_COVERAGE"] || ARGV.include?("--dry-run")
+  require "simplecov"
+  SimpleCov.start "rails" do
+    minimum_coverage 80
+    add_filter "/spec/"
+    add_filter "/config/"
+    add_filter "/vendor/"
+    add_group "Controllers", "app/controllers"
+    add_group "Models",      "app/models"
+    add_group "Services",    "app/services"
+    add_group "Jobs",        "app/jobs"
+    add_group "Channels",    "app/channels"
+    add_group "Serializers", "app/serializers"
+  end
 end
 
 require "spec_helper"

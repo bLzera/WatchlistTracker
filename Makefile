@@ -1,4 +1,4 @@
-.PHONY: up down logs test lint console migrate setup build shell help
+.PHONY: up down logs test lint console migrate setup build shell help docs
 
 # ─── desenvolvimento local ────────────────────────────────────────────────
 up:
@@ -46,6 +46,10 @@ lint-fix:
 security:
 	docker compose run --rm web bin/brakeman --no-pager
 	docker compose run --rm web bin/bundler-audit check --update
+
+# ─── documentação da API ─────────────────────────────────────────────────
+docs:
+	docker compose run --rm -e RAILS_ENV=test web bundle exec rake rswag:specs:swaggerize
 
 # ─── staging (no servidor remoto) ────────────────────────────────────────
 staging-logs:
@@ -98,6 +102,10 @@ help:
 	@echo "  make lint        — RuboCop"
 	@echo "  make lint-fix    — RuboCop com autocorreção"
 	@echo "  make security    — Brakeman + bundler-audit"
+	@echo ""
+	@echo "─── DEV: documentação da API ──────────────────────────────────────────"
+	@echo "  make docs        — Regenerar swagger/v1/swagger.yaml a partir dos specs"
+	@echo "  Swagger UI:      http://localhost:3000/api-docs (com o servidor no ar)"
 	@echo ""
 	@echo "─── STAGING / PROD: deploy ────────────────────────────────────────────"
 	@echo "  Staging:  git push origin main           (CI faz deploy automático)"

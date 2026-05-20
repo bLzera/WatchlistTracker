@@ -54,7 +54,22 @@ make up      # sobe todos os serviços
 | `make console`   | Rails console                    |
 | `make migrate`   | Rodar migrations                 |
 | `make shell`     | Bash no container Rails          |
+| `make docs`      | Regerar `swagger/v1/swagger.yaml` |
 | `make help`      | Lista completa                   |
+
+---
+
+## Documentação da API
+
+A API é documentada no padrão **OpenAPI 3.0** via [rswag](https://github.com/rswag/rswag) — os próprios specs RSpec geram a especificação.
+
+| Onde | O que tem |
+|---|---|
+| `backend/swagger/v1/swagger.yaml` | Especificação versionada no git (fonte oficial para o frontend) |
+| `http://localhost:3000/api-docs` | Swagger UI navegável (com servidor de dev no ar) |
+| `backend/spec/requests/api/v1/**` | Specs no DSL do rswag — fonte que gera o YAML |
+
+**Fluxo ao adicionar/mudar endpoint:** escreva o spec em `spec/requests/api/v1/...` → `make docs` → commit do YAML atualizado.
 
 ---
 

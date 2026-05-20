@@ -50,10 +50,11 @@ ao voltar a uma série pausada.
 - **Cache/queue:** Redis + Sidekiq.
 - **Auth:** Devise + JWT, Pundit para autorização.
 - **Real-time:** Action Cable (WebSocket).
-- **APIs externas:**
-  - **TMDB** — dados por episódio (crucial; OMDb não tem isso).
-  - **OMDb** — fallback / metadados gerais.
-  - **Anthropic Claude** — geração dos resumos (custo-benefício; ~US$2-5/mês na fase 1).
+- **APIs externas** (decisão 2026-05-19, TMDB descartado por custo de licença comercial):
+  - **TVMaze** — catálogo de séries (shows, episodes, datas, sinopse curta). Sem chave, free.
+  - **OMDb** — catálogo de **filmes** apenas (tracking, sem IA). Free 1000 req/dia.
+  - **MediaWiki/Wikipedia** — plot detalhado por episódio (alimenta o LLM). Sem chave.
+  - **Anthropic Claude** — geração dos resumos (~US$0,30/mês para 1 casal).
 - **Deploy:** VPS com Puma + Nginx + systemd.
 
 ---
@@ -69,15 +70,14 @@ Detalhes de SQL e queries: `arquitetura_dados.md`.
 
 ---
 
-## 7. Pipeline da feature de IA (resumo do fluxo)
+## 7. Pipeline da feature de IA (resumo do fluxo) — **TV-only**
 
 1. Usuário marca "Assistiu T2E5".
-2. Backend busca metadados do episódio no TMDB (cache local).
-3. Monta prompt com: sinopse oficial, contexto da série, episódio anterior e
-   resumo IA do anterior (encadeamento narrativo).
-4. Sidekiq dispara job → Claude → JSON estruturado.
-5. Resultado é salvo em `RESUMOS_IA` e devolvido (próxima leitura é cache).
-6. Se gerar > 10s, UI mostra "gerando…" sem bloquear.
+2. Backend garante episódios em cache via TVMaze.
+3. `WikipediaClient` resolve a página do episódio (slug direto → busca textual) e baixa o plot detalhado. Se não achar, segue em modo "contexto reduzido".
+4. Sidekiq monta prompt: sinopse da série, plot Wikipedia do atual + anterior, resumo IA anterior se houver.
+5. Claude retorna JSON estruturado (sinopse, plot points, personagens, conexões, **spoiler_tags**).
+6. Resultado salvo em `RESUMOS_IA` e broadcast via Action Cable.
 
 Detalhes: `arquitetura_llm.md`.
 
@@ -88,7 +88,7 @@ Detalhes: `arquitetura_llm.md`.
 **Inegociáveis:**
 - Auth (RF-001..004)
 - CRUD de listas (RF-005..008)
-- Buscar e adicionar mídia via OMDb/TMDB (RF-009..011)
+- Buscar e adicionar mídia via TVMaze (séries) e OMDb (filmes) (RF-009..011)
 - Status, rating, notas (RF-012..015)
 - Listas compartilhadas + sync real-time (RF-022..027)
 - **Resumos IA com conexão narrativa (RF-028..031) — o diferencial**
@@ -104,7 +104,7 @@ Cronograma sugerido: 12 semanas (ver `README.md` da pasta docs).
 
 ## 9. Requisitos não-funcionais relevantes
 
-- Busca de mídia < 1s (cache de resultados OMDb/TMDB).
+- Busca de mídia < 1s (cache local na tabela `media` — evita bater no OMDb/TVMaze quando já temos).
 - Sync real-time < 500ms entre parceiros.
 - Geração de resumo IA < 10s no caminho feliz.
 - Senhas com bcrypt, HTTPS em prod, JWT com expiração, rate limiting.
@@ -121,8 +121,9 @@ Cronograma sugerido: 12 semanas (ver `README.md` da pasta docs).
 | `movie_app_features.md` | Catálogo de features (o QUÊ) | Antes de discutir escopo |
 | `requisitos_funcionais.md` | 36 RFs com critérios de aceitação | Antes de implementar / virar testes RSpec |
 | `arquitetura_dados.md` | MER, SQL, queries, fluxos de dados | Ao mexer no banco |
-| `arquitetura_llm.md` | Pipeline TMDB + Claude, prompt, cache | Ao implementar a feature de IA |
+| `arquitetura_llm.md` | Pipeline TVMaze + MediaWiki + Claude, prompt, cache | Ao implementar a feature de IA |
 | `ruby_on_rails_architecture.md` | Stack Rails, gems, estrutura de pastas, deploy | Ao codar/deployar |
+| `diagrama_deploy.md` | Diagramas Mermaid: topologia de produção, fluxo de requisição, fluxo de deploy | Ao operar/debugar produção ou onboardar |
 | `00_CHECKLIST_FINAL.md` | Status do que está documentado vs. faltando | Para saber o que ainda falta planejar |
 | `GUIA_USO_DOCUMENTACAO.md` | Meta-guia explicando cada arquivo | Quando se perder na documentação |
 | `CONTEXTO_PROJETO.md` (este) | Síntese de tudo acima | Sempre que precisar do panorama rápido |

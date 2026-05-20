@@ -1,0 +1,353 @@
+---
+openapi: 3.0.1
+info:
+  title: WatchlistTracker API
+  version: v1
+  description: |
+    API REST do WatchlistTracker — app colaborativo para casais gerenciarem listas
+    de filmes e séries, com resumos de episódio gerados por IA.
+
+    Autenticação via JWT no header `Authorization: Bearer <token>`.
+    O token é retornado no header `Authorization` da resposta do login.
+paths:
+  "/api/v1/auth/confirmation":
+    post:
+      summary: Reenviar e-mail de confirmação
+      tags:
+      - Auth
+      parameters: []
+      responses:
+        '200':
+          description: e-mail reenviado (resposta genérica por segurança)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                  required:
+                  - email
+              required:
+              - user
+    get:
+      summary: Confirmar e-mail via token do link
+      tags:
+      - Auth
+      description: Endpoint chamado pelo link enviado no e-mail de confirmação.
+      parameters:
+      - name: confirmation_token
+        in: query
+        schema:
+          type: string
+        required: true
+      responses:
+        '200':
+          description: e-mail confirmado
+        '422':
+          description: token inválido ou expirado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/auth/password":
+    post:
+      summary: Solicitar e-mail de recuperação de senha
+      tags:
+      - Auth
+      description: |
+        Envia um e-mail com link de redefinição. Retorna sempre 200 — não
+        revela se o e-mail está ou não cadastrado (proteção contra enumeração).
+      parameters: []
+      responses:
+        '200':
+          description: instruções enviadas (ou silenciosamente ignorado)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                  required:
+                  - email
+              required:
+              - user
+    put:
+      summary: Redefinir a senha com o token recebido por e-mail
+      tags:
+      - Auth
+      parameters: []
+      responses:
+        '200':
+          description: senha redefinida
+        '422':
+          description: token inválido ou senhas divergentes
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    reset_password_token:
+                      type: string
+                    password:
+                      type: string
+                      minLength: 6
+                    password_confirmation:
+                      type: string
+                  required:
+                  - reset_password_token
+                  - password
+                  - password_confirmation
+              required:
+              - user
+  "/api/v1/auth/signup":
+    post:
+      summary: Cadastro de novo usuário
+      tags:
+      - Auth
+      description: |
+        Cria um usuário novo. O usuário recebe um e-mail de confirmação e
+        precisa confirmar antes de conseguir fazer login.
+      parameters: []
+      responses:
+        '201':
+          description: usuário criado, e-mail de confirmação enviado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                        format: email
+                      name:
+                        type: string
+        '422':
+          description: dados inválidos (e-mail duplicado, senha curta, etc.)
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: Maria Silva
+                    email:
+                      type: string
+                      format: email
+                      example: maria@example.com
+                    password:
+                      type: string
+                      minLength: 6
+                      example: password123
+                    password_confirmation:
+                      type: string
+                      example: password123
+                  required:
+                  - name
+                  - email
+                  - password
+                  - password_confirmation
+              required:
+              - user
+  "/api/v1/auth/sign_in":
+    post:
+      summary: Login do usuário
+      tags:
+      - Auth
+      description: Autentica com email e senha. Retorna o JWT no header `Authorization`.
+      parameters: []
+      responses:
+        '200':
+          description: login bem-sucedido
+          headers:
+            Authorization:
+              schema:
+                type: string
+              description: JWT no formato `Bearer <token>`
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/User"
+        '401':
+          description: conta não confirmada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    email:
+                      type: string
+                      format: email
+                      example: user@example.com
+                    password:
+                      type: string
+                      example: password123
+                  required:
+                  - email
+                  - password
+              required:
+              - user
+  "/api/v1/auth/sign_out":
+    delete:
+      summary: Logout do usuário
+      tags:
+      - Auth
+      description: Revoga o JWT atual (adiciona à denylist). O token deixa de ser
+        aceito.
+      security:
+      - bearer_auth: []
+      responses:
+        '200':
+          description: logout bem-sucedido
+        '401':
+          description: sem token
+  "/api/v1/users/me":
+    get:
+      summary: Dados do usuário autenticado
+      tags:
+      - Users
+      security:
+      - bearer_auth: []
+      responses:
+        '200':
+          description: perfil retornado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/User"
+        '401':
+          description: sem token
+    patch:
+      summary: Atualiza o perfil do usuário autenticado
+      tags:
+      - Users
+      security:
+      - bearer_auth: []
+      parameters: []
+      responses:
+        '200':
+          description: perfil atualizado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/User"
+        '422':
+          description: 'dados inválidos (ex: e-mail já em uso)'
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '401':
+          description: sem token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: Novo Nome
+                    email:
+                      type: string
+                      format: email
+              required:
+              - user
+servers:
+- url: http://localhost:3000
+  description: Desenvolvimento local
+- url: https://staging.example.com
+  description: Staging
+- url: https://app.example.com
+  description: Produção
+components:
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        name:
+          type: string
+          example: Maria Silva
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - id
+      - email
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Mensagem de erro
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email:
+            - já está em uso
+tags:
+- name: Auth
+  description: Cadastro, login, recuperação de senha e confirmação de e-mail
+- name: Users
+  description: Perfil do usuário autenticado

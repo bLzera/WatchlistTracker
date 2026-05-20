@@ -58,7 +58,7 @@
 ### 1.3 Buscar e Adicionar Filmes/Séries
 
 **Feature: Buscar Mídia**
-- Campo de busca que conecta com OMDb/TMDB
+- Campo de busca que conecta com TVMaze (séries) e OMDb (filmes)
 - Resultados em tempo real
 - Exibir: poster, título, ano, tipo (filme/série), rating IMDb
 - Clicar no resultado para ver detalhes
@@ -278,11 +278,11 @@ Usuários (especialmente em séries longas ou pausadas) perdem o contexto de:
 - Local LLM (Ollama): grátis, menor qualidade, rodando na VPS
 
 **Dados que a IA Usa:**
-- Sinopse oficial (OMDb/TMDB)
-- Título do episódio
-- Número (T2E5)
-- Info do episódio anterior (se disponível)
-- Plot summary da série inteira (contexto)
+- Sinopse curta da TVMaze (catálogo)
+- Plot detalhado da Wikipedia via MediaWiki API (quando disponível — TV-only)
+- Título e número do episódio (T2E5)
+- Info + resumo IA do episódio anterior (encadeamento)
+- Contexto geral da série (genres, summary)
 
 **Prompt Estruturado para IA:**
 ```
@@ -365,7 +365,7 @@ Formato: JSON estruturado
 **Feature: Sugestões Baseadas em Histórico**
 - "Já que você assistiu Breaking Bad, pode gostar de..."
 - Baseado em: gênero, rating, atores comuns
-- Usar dados públicos (TMDB "similar movies")
+- Usar dados públicos (endpoint TVMaze de gêneros/show casts; recomendação simples por interseção de gêneros)
 
 **Feature: Recomendação do Parceiro**
 - Tag #recomendação-parceiro em itens

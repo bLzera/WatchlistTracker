@@ -7,8 +7,8 @@ VCR.configure do |config|
   config.configure_rspec_metadata!
   config.default_cassette_options = { record: :new_episodes }
 
-  # Ocultar chaves de API nos cassetes gravados
-  config.filter_sensitive_data("<TMDB_API_KEY>")       { ENV["TMDB_API_KEY"] }
+  # Ocultar chaves de API nos cassetes gravados.
+  # TVMaze e MediaWiki não usam chave — não há nada a filtrar para esses hosts.
   config.filter_sensitive_data("<OMDB_API_KEY>")       { ENV["OMDB_API_KEY"] }
   config.filter_sensitive_data("<ANTHROPIC_API_KEY>")  { ENV["ANTHROPIC_API_KEY"] }
 end

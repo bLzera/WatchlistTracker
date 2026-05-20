@@ -17,6 +17,8 @@
 | **Curva de Aprendizado** | ⭐⭐⭐⭐ (conventions > configs) | ⭐⭐⭐⭐⭐ (já sabe React) |
 | **Deploy VPS** | ⭐⭐⭐⭐⭐ Simples (Puma + Nginx) | ⭐⭐⭐⭐ (Next.js server) |
 
+> **Nota (2026-05-19):** Após decisão de trocar APIs externas, este documento foi atualizado nas seções de Services, Migrations e Model `Media`. **Exemplos antigos de controllers/serializers ainda usam o nome `movie`/`Movie` por consistência histórica — leia como `media`/`Media`** (o nome `movie` virou alias mental para "qualquer mídia"). Fontes externas atuais: TVMaze (séries), OMDb (filmes), MediaWiki (plot p/ IA). Detalhes em [`arquitetura_llm.md`](arquitetura_llm.md) e [`arquitetura_dados.md`](arquitetura_dados.md).
+
 ### 1.2 Vantagens Rails para Este Projeto
 
 ✅ **WebSocket nativo (Action Cable)** - crucial para sincronização casal
@@ -25,7 +27,7 @@
 ✅ **Migrations** - controlar evolução do banco
 ✅ **Generators** - scaffold rápido
 ✅ **Convention over Configuration** - menos código boilerplate
-✅ **Gems úteis** - para praticamente tudo (JWT, TMDB, Claude, etc)
+✅ **Gems úteis** - para praticamente tudo (JWT, TVMaze, OMDb, Claude, etc)
 
 ### 1.3 Desvantagens Rails
 
@@ -70,7 +72,7 @@ Ruby on Rails 7+ (ou 8+)
 │   └── Redis (queue)
 │
 ├── External APIs
-│   ├── httparty ou rest-client (TMDB, OMDb, Claude)
+│   ├── httparty (TVMaze, OMDb, Wikipedia)
 │   └── anthropic-ruby (oficial Claude SDK)
 │
 ├── Testing
@@ -141,8 +143,10 @@ app/
 │   └── generate_episode_summary_job.rb
 │
 ├── services/           # Lógica complexa
-│   ├── tmdb_service.rb
-│   ├── claude_service.rb
+│   ├── tvmaze_client.rb        # catálogo de séries
+│   ├── omdb_client.rb          # catálogo de filmes
+│   ├── wikipedia_client.rb     # plot detalhado de episódios
+│   ├── anthropic_client.rb     # geração de resumo
 │   └── episode_summary_generator.rb
 │
 ├── channels/           # WebSocket (Action Cable)
@@ -406,106 +410,139 @@ end
 
 ### 4.4 Integração com APIs Externas
 
-**Next.js:**
-```javascript
-// lib/tmdb.ts
-import axios from 'axios'
-
-export const getTmdbEpisode = async (seriesId: number, season: number, episode: number) => {
-  const response = await axios.get(
-    `https://api.themoviedb.org/3/tv/${seriesId}/season/${season}/episode/${episode}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${process.env.TMDB_API_KEY}`
-      }
-    }
-  )
-  return response.data
-}
-
-// lib/claude.ts
-export const generateSummary = async (prompt: string) => {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  })
-  return response.json()
-}
-```
-
 **Rails:**
 ```ruby
 # Gemfile
 gem 'httparty'
-gem 'anthropic-ruby' # ou usar HTTParty também
+gem 'anthropic-ruby' # SDK oficial Claude
 
-# app/services/tmdb_service.rb
-class TmdbService
+# app/services/tvmaze_client.rb
+class TvmazeClient
   include HTTParty
-  base_uri 'https://api.themoviedb.org/3'
+  base_uri 'https://api.tvmaze.com'
 
-  def self.get_episode(series_id, season, episode)
-    get(
-      "/tv/#{series_id}/season/#{season}/episode/#{episode}",
-      headers: {
-        'Authorization' => "Bearer #{ENV['TMDB_API_KEY']}"
-      }
-    )
+  # GET /search/shows?q=...
+  def self.search_shows(query)
+    get('/search/shows', query: { q: query })
+  end
+
+  # GET /shows/{id}
+  def self.show(tvmaze_id)
+    get("/shows/#{tvmaze_id}")
+  end
+
+  # GET /shows/{id}/episodes
+  def self.episodes(tvmaze_id)
+    get("/shows/#{tvmaze_id}/episodes")
   end
 end
 
-# app/services/claude_service.rb
-class ClaudeService
-  def self.generate_summary(series:, current_episode:, prev_episode:, prev_summary:)
-    client = Anthropic::Client.new(api_key: ENV['ANTHROPIC_API_KEY'])
-    
-    prompt = build_prompt(
-      series: series,
-      current_episode: current_episode,
-      prev_episode: prev_episode,
-      prev_summary: prev_summary
-    )
-    
-    response = client.messages.create(
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    )
-    
-    JSON.parse(response['content'][0]['text'])
+# app/services/omdb_client.rb
+class OmdbClient
+  include HTTParty
+  base_uri 'https://www.omdbapi.com'
+
+  def self.search_movies(query)
+    get('/', query: { s: query, type: 'movie', apikey: ENV.fetch('OMDB_API_KEY') })
   end
 
-  private
+  def self.find_by_imdb_id(imdb_id)
+    get('/', query: { i: imdb_id, apikey: ENV.fetch('OMDB_API_KEY') })
+  end
+end
 
-  def self.build_prompt(series:, current_episode:, prev_episode:, prev_summary:)
-    # ... montar prompt como antes
+# app/services/wikipedia_client.rb
+# Resolve título da página e baixa plot do episódio.
+# Estratégia: slug direto → busca textual → degrada (NULL).
+class WikipediaClient
+  include HTTParty
+  base_uri 'https://en.wikipedia.org/w/api.php'
+
+  def self.fetch_episode_plot(show_name:, episode_name:)
+    page = resolve_page(show_name: show_name, episode_name: episode_name)
+    return { title: nil, url: nil, plot: nil } unless page
+
+    extract = get('', query: {
+      action: 'query', format: 'json', prop: 'extracts',
+      explaintext: 1, exintro: 0, titles: page
+    })
+    pageobj = extract.dig('query', 'pages')&.values&.first
+    { title: page,
+      url: "https://en.wikipedia.org/wiki/#{page.gsub(' ', '_')}",
+      plot: pageobj&.dig('extract') }
+  end
+
+  def self.resolve_page(show_name:, episode_name:)
+    # 1. Slug direto: "{episode_name} ({show_name})"
+    direct = "#{episode_name} (#{show_name})"
+    return direct if page_exists?(direct)
+
+    # 2. Busca textual
+    search = get('', query: {
+      action: 'query', format: 'json', list: 'search',
+      srsearch: "#{episode_name} #{show_name} episode"
+    })
+    hit = search.dig('query', 'search')&.find { |s| s['title'].include?(show_name) }
+    hit&.dig('title')
+  end
+
+  def self.page_exists?(title)
+    response = get('', query: { action: 'query', format: 'json', titles: title })
+    pages = response.dig('query', 'pages')
+    pages.present? && !pages.keys.include?('-1')
+  end
+end
+
+# app/services/anthropic_client.rb
+class AnthropicClient
+  def self.generate_summary(prompt)
+    client = Anthropic::Client.new(api_key: ENV.fetch('ANTHROPIC_API_KEY'))
+    response = client.messages.create(
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
+    )
+    JSON.parse(response['content'][0]['text'])
   end
 end
 
 # app/models/episode.rb
 class Episode < ApplicationRecord
-  belongs_to :series, class_name: 'Movie'
-  has_one :resume_ia
-  
-  def self.find_or_fetch(series_id, season, episode)
-    where(series_id: series_id, temporada: season, episodio: episode).first_or_create! do |ep|
-      tmdb_data = TmdbService.get_episode(series.tmdb_id, season, episode)
-      ep.assign_attributes(
-        titulo: tmdb_data['name'],
-        sinopse: tmdb_data['overview'],
-        aired_date: tmdb_data['air_date']
+  belongs_to :media
+  has_one :resumo_ia, dependent: :destroy
+
+  # Garante episódio em cache. TVMaze é a fonte do catálogo.
+  def self.find_or_fetch(media:, season:, number:)
+    find_by(media: media, season: season, number: number) ||
+      sync_from_tvmaze!(media).find_by!(media: media, season: season, number: number)
+  end
+
+  # Baixa todos episódios de uma vez (uma chamada TVMaze cobre série inteira).
+  def self.sync_from_tvmaze!(media)
+    raise 'media is not TV' unless media.kind == 'tv'
+    payload = TvmazeClient.episodes(media.tvmaze_id)
+    payload.each do |ep|
+      where(media: media, tvmaze_id: ep['id']).first_or_create!(
+        season: ep['season'], number: ep['number'],
+        name: ep['name'], summary: ep['summary'],
+        airdate: ep['airdate'], runtime_minutes: ep['runtime']
       )
     end
+    where(media: media)
+  end
+
+  # Idempotente: só faz fetch se nunca tentou (wiki_fetched_at IS NULL).
+  def ensure_wiki_plot!
+    return if wiki_fetched_at.present?
+    result = WikipediaClient.fetch_episode_plot(
+      show_name: media.title, episode_name: name
+    )
+    update!(
+      wiki_page_title: result[:title],
+      wiki_url: result[:url],
+      wiki_plot: result[:plot],
+      wiki_fetched_at: Time.current
+    )
   end
 end
 ```
@@ -561,28 +598,38 @@ class CreateLists < ActiveRecord::Migration[7.0]
   end
 end
 
-# db/migrate/20240115100003_create_movies.rb
-class CreateMovies < ActiveRecord::Migration[7.0]
+# db/migrate/20240115100003_create_media.rb
+class CreateMedia < ActiveRecord::Migration[7.0]
   def change
-    create_table :movies, id: :uuid do |t|
-      t.string :imdb_id, null: false
-      t.integer :tmdb_id
-      t.string :title, null: false
+    create_table :media, id: :uuid do |t|
+      t.string  :kind, null: false              # 'tv' | 'movie'
+      t.integer :tvmaze_id                      # se kind='tv'
+      t.string  :imdb_id                        # tt0000000 (sempre que disponível)
+      t.string  :title, null: false
       t.integer :year
-      t.string :media_type, null: false # 'film', 'series'
-      t.string :poster_url
+      t.string  :poster_url
       t.decimal :rating_imdb, precision: 3, scale: 1
-      t.text :sinopse
-      t.string :genres, array: true, default: []
-      t.integer :runtime_minutes # filmes
-      t.integer :total_seasons # séries
-      t.integer :total_episodes # séries
-      
+      t.text    :sinopse                        # summary curto
+      t.string  :genres, array: true, default: []
+      t.integer :runtime_minutes                # filmes
+      t.integer :total_seasons                  # séries
+      t.integer :total_episodes                 # séries
+      t.jsonb   :raw_payload                    # auditoria/debug
+      t.datetime :fetched_at
       t.timestamps
     end
-    
-    add_index :movies, :imdb_id, unique: true
-    add_index :movies, :tmdb_id
+
+    add_index :media, :tvmaze_id, unique: true, where: 'tvmaze_id IS NOT NULL'
+    add_index :media, :imdb_id,   unique: true, where: "kind = 'movie'"
+    add_index :media, [:kind, :title]
+
+    execute <<~SQL
+      ALTER TABLE media ADD CONSTRAINT media_kind_check
+        CHECK (kind IN ('tv', 'movie'));
+      ALTER TABLE media ADD CONSTRAINT media_external_id_present
+        CHECK ((kind = 'tv'    AND tvmaze_id IS NOT NULL)
+            OR (kind = 'movie' AND imdb_id   IS NOT NULL));
+    SQL
   end
 end
 
@@ -590,20 +637,29 @@ end
 class CreateEpisodes < ActiveRecord::Migration[7.0]
   def change
     create_table :episodes, id: :uuid do |t|
-      t.references :series, foreign_key: { to_table: :movies }, type: :uuid
-      t.string :imdb_id
-      t.integer :temporada, null: false
-      t.integer :episodio, null: false
-      t.string :titulo
-      t.text :sinopse
-      t.date :aired_date
+      t.references :media, foreign_key: true, type: :uuid, null: false
+      t.integer :tvmaze_id, null: false
+      t.integer :season,    null: false
+      t.integer :number,    null: false
+      t.string  :name
+      t.text    :summary                  # summary curto TVMaze
+      t.date    :airdate
       t.integer :runtime_minutes
-      t.decimal :rating_imdb, precision: 3, scale: 1
-      
+
+      # Cache Wikipedia (alimenta o LLM)
+      t.string   :wiki_page_title
+      t.string   :wiki_url
+      t.text     :wiki_plot
+      t.datetime :wiki_fetched_at         # NULL = nunca tentou
+
       t.timestamps
     end
-    
-    add_index :episodes, [:series_id, :temporada, :episodio], unique: true
+
+    add_index :episodes, :tvmaze_id, unique: true
+    add_index :episodes, [:media_id, :season, :number], unique: true
+    add_index :episodes, :media_id,
+              where: 'wiki_fetched_at IS NULL',
+              name: 'idx_episodes_wiki_pending'
   end
 end
 
@@ -611,23 +667,21 @@ end
 class CreateListItems < ActiveRecord::Migration[7.0]
   def change
     create_table :list_items, id: :uuid do |t|
-      t.references :list, foreign_key: true, type: :uuid
-      t.references :movie, foreign_key: true, type: :uuid
+      t.references :list,  foreign_key: true, type: :uuid
+      t.references :media, foreign_key: true, type: :uuid
       t.string :status, default: 'not_watched' # not_watched, watching, watched, paused, abandoned
       t.decimal :rating_pessoal, precision: 3, scale: 1
       t.text :notas
-      t.string :current_episode # T2E5
+      t.string :current_episode # T2E5 (NULL para filmes)
       t.datetime :watched_at
       t.date :watched_date
-      
+
       t.timestamps
       t.datetime :deleted_at
     end
-    
-    add_index :list_items, :list_id
-    add_index :list_items, :movie_id
+
     add_index :list_items, :status
-    add_index :list_items, [:list_id, :movie_id], unique: true
+    add_index :list_items, [:list_id, :media_id], unique: true
   end
 end
 
@@ -681,35 +735,66 @@ class List < ApplicationRecord
   end
 end
 
-# app/models/movie.rb
-class Movie < ApplicationRecord
+# app/models/media.rb
+class Media < ApplicationRecord
+  self.table_name = 'media'
+
   has_many :list_items, dependent: :destroy
   has_many :lists, through: :list_items
-  has_many :episodes, foreign_key: 'series_id'
-  
-  validates :imdb_id, uniqueness: true
-  
-  def self.find_or_fetch(imdb_id)
-    where(imdb_id: imdb_id).first_or_create! do |movie|
-      # Buscar OMDb e/ou TMDB
-      omdb_data = OmdbService.get_movie(imdb_id)
-      movie.assign_attributes(
-        title: omdb_data['Title'],
-        year: omdb_data['Year'].to_i,
-        media_type: omdb_data['Type'],
-        poster_url: omdb_data['Poster'],
-        rating_imdb: omdb_data['imdbRating'].to_f,
-        sinopse: omdb_data['Plot']
-      )
-    end
+  has_many :episodes, dependent: :destroy  # só usado quando kind='tv'
+
+  validates :kind, inclusion: { in: %w[tv movie] }
+  validates :tvmaze_id, uniqueness: true, allow_nil: true
+
+  scope :tv,    -> { where(kind: 'tv') }
+  scope :movie, -> { where(kind: 'movie') }
+
+  def tv?;    kind == 'tv'    end
+  def movie?; kind == 'movie' end
+
+  # Garante uma série em cache a partir do tvmaze_id.
+  def self.find_or_fetch_tv(tvmaze_id)
+    find_by(tvmaze_id: tvmaze_id) || create_from_tvmaze!(tvmaze_id)
   end
-  
-  def series?
-    media_type == 'series'
+
+  # Garante um filme em cache a partir do imdb_id.
+  def self.find_or_fetch_movie(imdb_id)
+    find_by(kind: 'movie', imdb_id: imdb_id) || create_from_omdb!(imdb_id)
   end
-  
-  def film?
-    media_type == 'film'
+
+  def self.create_from_tvmaze!(tvmaze_id)
+    data = TvmazeClient.show(tvmaze_id)
+    create!(
+      kind: 'tv',
+      tvmaze_id: data['id'],
+      imdb_id: data.dig('externals', 'imdb'),
+      title: data['name'],
+      year: data['premiered']&.first(4)&.to_i,
+      poster_url: data.dig('image', 'original'),
+      rating_imdb: data.dig('rating', 'average'),
+      sinopse: data['summary'],
+      genres: data['genres'],
+      runtime_minutes: data['runtime'],
+      raw_payload: data,
+      fetched_at: Time.current
+    )
+  end
+
+  def self.create_from_omdb!(imdb_id)
+    data = OmdbClient.find_by_imdb_id(imdb_id)
+    create!(
+      kind: 'movie',
+      imdb_id: data['imdbID'],
+      title: data['Title'],
+      year: data['Year'].to_i,
+      poster_url: data['Poster'],
+      rating_imdb: data['imdbRating']&.to_f,
+      sinopse: data['Plot'],
+      genres: data['Genre']&.split(', '),
+      runtime_minutes: data['Runtime']&.to_i,
+      raw_payload: data,
+      fetched_at: Time.current
+    )
   end
 end
 

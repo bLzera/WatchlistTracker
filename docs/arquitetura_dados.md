@@ -1,5 +1,12 @@
 # 🗄️ Arquitetura de Dados - Movie & TV Series Tracker
 
+> **Decisão arquitetural (2026-05-19):** TMDB foi descartado. Fontes externas atuais:
+> - **TVMaze** — catálogo de **séries** (Shows, Episodes). Campo de junção: `tvmaze_id`.
+> - **OMDb** — catálogo de **filmes**. Campo de junção: `imdb_id`.
+> - **MediaWiki/Wikipedia** — plot detalhado por episódio (TV-only, cache no próprio `episodes`).
+>
+> O modelo mantém **uma única tabela `media`** com discriminador `kind = 'tv' | 'movie'`, em vez de tabelas separadas, para `list_items` continuar com FK simples (`media_id`).
+
 ## 1. Modelo de Entidades Relacional (MER)
 
 ```
@@ -224,76 +231,99 @@ CREATE INDEX idx_list_members_list_id ON list_members(list_id);
 CREATE INDEX idx_list_members_user_id ON list_members(user_id);
 ```
 
-### 2.4 MOVIES (cache de filmes/séries buscadas)
+### 2.4 MEDIA (cache de filmes/séries buscadas)
+
+Cache unificado de séries (TVMaze) e filmes (OMDb). Discriminador `kind` define qual fonte preencheu a linha.
+
 ```sql
-CREATE TABLE movies (
+CREATE TABLE media (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    imdb_id VARCHAR(20) UNIQUE NOT NULL, -- tt0000000
+    kind VARCHAR(10) NOT NULL,        -- 'tv' (TVMaze) | 'movie' (OMDb)
+    tvmaze_id INTEGER,                -- preenchido se kind='tv'
+    imdb_id VARCHAR(20),              -- preenchido sempre que disponível
     title VARCHAR(500) NOT NULL,
     year INTEGER,
-    type VARCHAR(50) NOT NULL, -- film, series, episode
     poster_url VARCHAR(500),
-    rating_imdb DECIMAL(3,1),
-    sinopse TEXT,
-    genres TEXT[], -- ARRAY de gêneros
-    runtime_minutes INTEGER, -- para filmes
-    total_seasons INTEGER, -- para séries
-    total_episodes INTEGER, -- para séries
+    rating_imdb DECIMAL(3,1),         -- OMDb.imdbRating ou TVMaze.rating.average
+    sinopse TEXT,                     -- summary curto (TVMaze) ou Plot (OMDb)
+    genres TEXT[],
+    runtime_minutes INTEGER,          -- filmes
+    total_seasons INTEGER,            -- séries
+    total_episodes INTEGER,           -- séries (cacheado, atualiza junto com episodes)
+    raw_payload JSONB,                -- payload bruto da API de origem (auditoria/debug)
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    CHECK (type IN ('film', 'series', 'episode'))
+
+    CHECK (kind IN ('tv', 'movie')),
+    CHECK ((kind = 'tv'    AND tvmaze_id IS NOT NULL)
+        OR (kind = 'movie' AND imdb_id   IS NOT NULL))
 );
 
-CREATE INDEX idx_movies_imdb_id ON movies(imdb_id);
-CREATE INDEX idx_movies_title ON movies(title);
+-- Unicidade por fonte (uma série por tvmaze_id, um filme por imdb_id)
+CREATE UNIQUE INDEX uniq_media_tvmaze ON media(tvmaze_id) WHERE tvmaze_id IS NOT NULL;
+CREATE UNIQUE INDEX uniq_media_imdb_movie ON media(imdb_id) WHERE kind = 'movie';
+CREATE INDEX idx_media_kind_title ON media(kind, title);
 ```
 
-### 2.5 EPISODES (episódios de séries)
+> **Observação:** `list_items.media_id` (antes `movie_id`) referencia esta tabela e funciona igual para filmes e séries. Para séries, `list_items.current_episode` continua sendo `'T{x}E{y}'`.
+
+### 2.5 EPISODES (séries — cache TVMaze + Wikipedia)
+
 ```sql
 CREATE TABLE episodes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    series_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
-    imdb_id VARCHAR(20),
-    temporada INTEGER NOT NULL,
-    episódio INTEGER NOT NULL,
-    título VARCHAR(500),
-    sinopse TEXT,
-    aired_date DATE,
+    media_id UUID NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    tvmaze_id INTEGER UNIQUE NOT NULL,
+    season INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    name VARCHAR(500),
+    summary TEXT,                     -- summary curto da TVMaze (1-2 frases)
+    airdate DATE,
     runtime_minutes INTEGER,
-    rating_imdb DECIMAL(3,1),
+
+    -- Cache Wikipedia (plot detalhado, alimenta o LLM)
+    wiki_page_title VARCHAR(500),     -- ex: "Breakage (Breaking Bad)"; NULL se não achou
+    wiki_url VARCHAR(500),
+    wiki_plot TEXT,                   -- plot completo extraído via prop=extracts
+    wiki_fetched_at TIMESTAMP,        -- NULL = nunca tentou; preenchido = já tentou (mesmo que NULL no title)
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    UNIQUE(series_id, temporada, episódio)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(media_id, season, number)
 );
 
-CREATE INDEX idx_episodes_series_id ON episodes(series_id);
+CREATE INDEX idx_episodes_media_id ON episodes(media_id);
+CREATE INDEX idx_episodes_wiki_pending ON episodes(media_id) WHERE wiki_fetched_at IS NULL;
 ```
+
+> `episodes` só existe para `media.kind = 'tv'`. Aplicação garante essa invariante; não há FK condicional para mantê-la simples.
 
 ### 2.6 LIST_ITEMS (itens nas listas)
 ```sql
 CREATE TABLE list_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     list_id UUID NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-    movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL DEFAULT 'not_watched', 
+    media_id UUID NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'not_watched',
     -- not_watched, watching, watched, paused, abandoned
     rating_pessoal DECIMAL(3,1), -- 1-10
     notas TEXT,
-    current_episode VARCHAR(20), -- T{x}E{y} para séries
+    current_episode VARCHAR(20), -- T{x}E{y} para séries (NULL para filmes)
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    watched_at TIMESTAMP, -- data quando completou
-    watched_date DATE, -- data manual que assistiu
+    watched_at TIMESTAMP,
+    watched_date DATE,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
-    
-    UNIQUE(list_id, movie_id),
+
+    UNIQUE(list_id, media_id),
     CHECK (status IN ('not_watched', 'watching', 'watched', 'paused', 'abandoned')),
     CHECK (rating_pessoal >= 1 AND rating_pessoal <= 10)
 );
 
 CREATE INDEX idx_list_items_list_id ON list_items(list_id);
-CREATE INDEX idx_list_items_movie_id ON list_items(movie_id);
+CREATE INDEX idx_list_items_media_id ON list_items(media_id);
 CREATE INDEX idx_list_items_status ON list_items(status);
 ```
 
@@ -362,25 +392,26 @@ CREATE INDEX idx_votos_item_id ON votos(item_id);
 CREATE INDEX idx_votos_user_id ON votos(user_id);
 ```
 
-### 2.11 RESUMOS_IA
+### 2.11 RESUMOS_IA (TV-only)
 ```sql
 CREATE TABLE resumos_ia (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    episodio_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- quem pediu
+    episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,  -- quem disparou a geração
     sinopse_expandida TEXT NOT NULL,
-    plot_points JSONB, -- array de strings com plot points
-    personagens JSONB, -- array de {nome, importancia, mudanças}
-    conexoes_anterior TEXT, -- conexão com episódio anterior
-    indicadores JSONB, -- array de {tipo: spoiler|morte|emocional|crucial, descricao}
-    modelo_ia VARCHAR(100), -- qual IA foi usada (claude, gpt4, etc)
-    token_usage INTEGER, -- quantos tokens usou
+    plot_points JSONB,         -- array de strings
+    personagens JSONB,         -- array de {nome, papel, mudanca}
+    conexoes JSONB,            -- {resolucoes, progressao, prepara_proximo}
+    spoiler_tags JSONB,        -- array de {trecho, severidade: leve|forte|crítico}
+    contexto_reduzido BOOLEAN DEFAULT FALSE,  -- true = gerado sem wiki_plot
+    modelo_ia VARCHAR(100),
+    token_usage INTEGER,
     gerado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    UNIQUE(episodio_id) -- um resumo por episódio
+
+    UNIQUE(episode_id)
 );
 
-CREATE INDEX idx_resumos_ia_episodio_id ON resumos_ia(episodio_id);
+CREATE INDEX idx_resumos_ia_episode_id ON resumos_ia(episode_id);
 ```
 
 ### 2.12 ATIVIDADES (log para sincronização)
@@ -498,47 +529,44 @@ GROUP BY v.voto;
 
 ## 4. Estratégia de Cache
 
-### 4.1 Cache de Filmes/Séries (OMDb)
-- **O quê:** Dados de filmes/séries da API OMDb
-- **Onde:** Tabela MOVIES
-- **Duração:** Indefinido (primeira busca cria, depois reutiliza)
-- **Invalidação:** Atualizar anualmente (yearly)
+### 4.1 Catálogo de mídias
+- **O quê:** Séries (TVMaze) e filmes (OMDb).
+- **Onde:** Tabela `media`.
+- **Por quê cachear agressivamente:** OMDb tem só 1000 req/dia no free tier — qualquer hit no cache evita uma chamada externa.
+- **Duração:** Indefinida. Re-fetch manual via job admin se metadados ficarem obsoletos (ex: série encerrou e mudou `total_seasons`).
 
-### 4.2 Cache de Episódios
-- **O quê:** Dados de episódios (título, sinopse, aired_date)
-- **Onde:** Tabela EPISODES
-- **Duração:** Indefinido
-- **Invalidação:** Anual
+### 4.2 Episódios + plot Wikipedia
+- **O quê:** Lista de episódios (TVMaze) + plot detalhado (Wikipedia).
+- **Onde:** Tabela `episodes` (campos `wiki_*` para o cache da MediaWiki).
+- **Semântica do `wiki_fetched_at`:**
+  - `NULL` → nunca tentou, próxima geração de resumo dispara o `WikipediaClient`.
+  - `NOT NULL` com `wiki_page_title NOT NULL` → temos plot, usa direto.
+  - `NOT NULL` com `wiki_page_title NULL` → já tentamos e falhou; não tenta de novo automaticamente (evita re-bater na MediaWiki em séries sem cobertura).
+- **Invalidação:** manual (admin pode zerar `wiki_fetched_at` p/ forçar re-tentativa).
 
-### 4.3 Cache de Resumos IA
-- **O quê:** Resumos gerados pela IA
-- **Onde:** Tabela RESUMOS_IA
-- **Duração:** Indefinido (salvo uma vez)
-- **Invalidação:** Regenerar se usuário solicitar
+### 4.3 Resumos IA
+- **Onde:** Tabela `resumos_ia`. Único por `episode_id`.
+- **Invalidação:** explícita (usuário clica "regenerar") — descarta o registro e refaz.
 
-### 4.4 Cache de Buscas (Redis - opcional fase 2)
-- **O quê:** Resultados de buscas recentes
-- **Onde:** Redis (na VPS)
-- **Duração:** 24 horas
-- **Invalidação:** TTL automático
+### 4.4 Cache de buscas (Redis — opcional fase 2)
+- Resultados de `GET /search` cacheados por 24h por termo.
 
 ---
 
 ## 5. Fluxos de Dados
 
-### Fluxo 1: Usuário Busca Filme
+### Fluxo 1: Usuário Busca Mídia
 ```
-1. Usuário digita "Breaking Bad" em campo de busca
-2. Frontend debounce 300ms
-3. Frontend chama GET /api/search?q=Breaking%20Bad
-4. Backend verifica cache (Redis) por "Breaking Bad"
-5. Se não em cache, chama OMDb API
-6. Se em OMDb, salva em tabela MOVIES (se não existe)
-7. Retorna para frontend com poster, título, etc
-8. Frontend exibe resultado
-9. Usuário clica em "Breaking Bad"
-10. Frontend obtém detalhes completos de movies.id
-11. Mostra opção "Adicionar à Lista"
+1. Usuário digita "Breaking Bad" com filtro de tipo (séries|filmes)
+2. Frontend debounce 300ms → GET /api/v1/search?q=...&kind=tv (ou movie)
+3. Backend roteia para o client correto:
+   - kind='tv'    → TvmazeClient.search    (api.tvmaze.com/search/shows)
+   - kind='movie' → OmdbClient.search      (omdbapi.com/?s=...&type=movie)
+4. Cache local (tabela `media`) é consultado primeiro por chave externa
+   (tvmaze_id ou imdb_id). Hit → retorna direto, sem chamada externa.
+5. Miss → chamada à API externa → upsert em `media` com raw_payload + fetched_at.
+6. Retorna lista de mídias unificadas (mesmo shape p/ tv e movie).
+7. Usuário clica → frontend abre detalhes de media.id, oferece "Adicionar à Lista".
 ```
 
 ### Fluxo 2: Adicionar Item à Lista
@@ -588,43 +616,9 @@ GROUP BY v.voto;
 8. B vê novo item em tempo real (<500ms)
 ```
 
-### Fluxo 5: Gerar Resumo IA com Conexões
-```
-1. Usuário marca T2E5 assistido
-2. App oferece: "Gerar resumo inteligente?"
-3. Usuário clica "Sim"
-4. Backend executa:
-   a) SELECT episode WHERE series_id = X AND temp = 2 AND ep = 5
-   b) SELECT resumo_anterior WHERE series_id = X AND temp = 2 AND ep = 4
-   c) Monta prompt para IA:
-      ```
-      Série: Breaking Bad
-      Episódio: T2E5 - "Half Measures"
-      Sinopse oficial: "Walter..."
-      
-      Contexto da série: "Breaking Bad é sobre..."
-      
-      Episódio anterior (T2E4 "Down"):
-      - Resumo: "Walter finally..."
-      - Plot points: [...]
-      
-      Por favor gere resumo com conexões
-      ```
-   d) Chama Claude API com contexto
-   e) Recebe resumo estruturado em JSON:
-      ```json
-      {
-        "sinopse_expandida": "...",
-        "plot_points": ["...", "..."],
-        "personagens": [...],
-        "conexoes": "T2E5 resolve a trama do traficante iniciada em T2E3...",
-        "indicadores": [...]
-      }
-      ```
-   f) Salva em RESUMOS_IA com unique(episodio_id)
-5. Retorna para frontend
-6. Frontend exibe resumo com seção especial "Conexões com T2E4"
-```
+### Fluxo 5: Gerar Resumo IA com Conexões (TV-only)
+
+Pipeline canônico está em [`arquitetura_llm.md`](arquitetura_llm.md). Resumo: TVMaze garante os episódios em cache → WikipediaClient resolve `wiki_page_title` e baixa `wiki_plot` → Sidekiq job monta prompt com show + episódio atual + anterior + resumo anterior (se houver) → Claude retorna JSON estruturado → persistência em `resumos_ia` (UNIQUE por `episode_id`) → broadcast Action Cable. Quando Wikipedia não tem cobertura, o registro é salvo com `contexto_reduzido = true` e a UI mostra o aviso.
 
 ---
 

@@ -221,7 +221,7 @@
 
 ## RF-009: Buscar Filme/Série na API
 
-**Descrição:** Usuário pode buscar filmes e séries via API de terceiros (OMDb).
+**Descrição:** Usuário pode buscar filmes e séries via APIs de terceiros. **Séries** vêm da **TVMaze** (gratuita, sem chave); **filmes** vêm da **OMDb** (free tier 1000 req/dia).
 
 **Atores:** Usuário autenticado
 
@@ -229,17 +229,19 @@
 
 **Passos:**
 1. Clica em campo de busca ou "Adicionar Filme/Série"
-2. Digita nome (ex: "Breaking Bad")
-3. Aguarda resultados
+2. Escolhe filtro de tipo: "Séries" ou "Filmes" (padrão: Séries)
+3. Digita nome (ex: "Breaking Bad")
+4. Aguarda resultados
 
 **Critérios de Aceitação:**
+- ✅ Backend roteia a busca conforme o tipo: `tv` → `GET https://api.tvmaze.com/search/shows?q={q}`; `movie` → `GET https://www.omdbapi.com/?s={q}&type=movie`.
 - ✅ Busca em tempo real (não precisa clicar buscar)
 - ✅ Debounce: espera 300ms antes de fazer requisição
 - ✅ Mostra 10-20 primeiros resultados
 - ✅ Cada resultado mostra: poster, título, ano, tipo
 - ✅ Clique no resultado abre detalhes
 - ✅ Se nenhum resultado, mensagem clara
-- ✅ Máximo 1000 requisições/dia (limite OMDb free)
+- ✅ TVMaze: sem rate limit relevante (~20 req/s cortês). OMDb: limite de 1000 req/dia — usar cache local agressivo (`movies` table) para reduzir chamadas.
 - ✅ Histórico de buscas mantido (últimas 15)
 - ✅ Pode limpar histórico manualmente
 
@@ -263,13 +265,13 @@
 - ✅ Poster de alta qualidade (se disponível)
 - ✅ Título completo
 - ✅ Ano de lançamento
-- ✅ Tipo (Filme, Série, Episódio)
-- ✅ Sinopse completa
-- ✅ Rating IMDb
+- ✅ Tipo (Filme, Série)
+- ✅ Sinopse (séries: `summary` da TVMaze; filmes: `Plot` do OMDb)
+- ✅ Rating IMDb (filmes: campo `imdbRating` do OMDb; séries: campo `rating.average` da TVMaze quando disponível)
 - ✅ Gêneros (ex: Drama, Thriller)
 - ✅ Duração (filme) ou nº temporadas/episódios (série)
-- ✅ Elenco principal (3-5 atores)
-- ✅ Link para IMDb (ícone externo)
+- ✅ Elenco principal (3-5 atores; séries: endpoint `/shows/{id}/cast` da TVMaze; filmes: campo `Actors` do OMDb)
+- ✅ Link externo (filmes: IMDb via `imdb_id`; séries: TVMaze + IMDb se disponível em `externals.imdb`)
 - ✅ Botão "Adicionar à Lista"
 - ✅ Se já está em uma lista, indicar qual(is)
 
@@ -763,6 +765,10 @@
 
 ## RF-028: Resumo Inteligente de Episódio com IA
 
+> **Escopo:** TV-only. Esta feature e todas as subsequentes do bloco IA (RF-029, RF-030, RF-031) não se aplicam a filmes.
+>
+> **Fonte de contexto:** plot detalhado é obtido da **MediaWiki API (Wikipedia)** por episódio. Quando não houver página dedicada, o resumo é gerado em modo "contexto reduzido" (só com sinopse curta da TVMaze) e a UI deve indicar isso ao usuário.
+
 **Descrição:** Para séries, após marcar episódio como assistido, IA gera resumo inteligente com conexões narrativas.
 
 **Atores:** Usuário autenticado
@@ -776,13 +782,14 @@
 4. IA analisa e gera resumo
 
 **Critérios de Aceitação:**
-- ✅ Resumo gerado em <10s (mostra "gerando..." se mais lento)
+- ✅ Geração é assíncrona (Sidekiq) — request HTTP retorna imediato com "gerando…"; UI recebe o resumo via Action Cable quando pronto (alvo <15s p95).
 - ✅ Resumo inclui:
   1. **Sinopse Expandida** (3-5 parágrafos)
   2. **Plot Points Principais** (3-5 bullet points)
   3. **Personagens Destaque** (quem aparece, mudanças no arco)
   4. **Conexões com Episódio Anterior** (como T2E5 conecta com T2E4)
-  5. **Indicadores Importantes** (⚠️ spoiler, 💀 morte, 💔 emocional, 🔑 crucial)
+  5. **Spoiler Tags** — trechos sensíveis marcados com severidade (`leve`, `forte`, `crítico`) para que a UI possa borrar/clicar-para-revelar.
+- ✅ Flag `contexto_reduzido` indica quando o resumo foi gerado sem plot da Wikipedia — UI mostra aviso.
 - ✅ Resumo é salvo em cache (reutilizar depois)
 - ✅ Quando abre série novamente, mostra resumo do último episódio
 - ✅ Pode regenerar resumo (refrescar)
@@ -856,6 +863,8 @@
 ---
 
 ## RF-031: Gerar Resumo de Temporada Inteira
+
+> **Escopo:** TV-only.
 
 **Descrição:** IA pode gerar resumo de toda uma temporada (todos episódios vistos).
 

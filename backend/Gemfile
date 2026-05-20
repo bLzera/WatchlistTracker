@@ -29,7 +29,14 @@ gem "httparty"
 # Variáveis de ambiente
 gem "dotenv-rails"
 
+# Documentação OpenAPI / Swagger
+gem "rswag-api"
+gem "rswag-ui"
+
 group :development, :test do
+  # Geração da especificação OpenAPI a partir dos request specs
+  gem "rswag-specs"
+
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", require: false
   gem "brakeman", require: false
